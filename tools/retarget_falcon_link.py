@@ -447,6 +447,20 @@ def render_hand(spec, path, k=54):
     fig.tight_layout(); fig.savefig(path, dpi=80); plt.close(fig)
 
 
+GAME_FPS = 30  # Triforce log: "game's frame rate 29" + real-time step; TotK-engine anims are 30 fps game frames
+
+
+def to_fps(spec, fps=GAME_FPS):
+    """Resample a per-frame spec to `fps` by taking every n-th source sample (60 -> 30: even Melee frames).
+    Melee frame f maps to game anim frame f/2, so the f52-56 hit window becomes anim frames 26-28."""
+    step = spec["fps"] // fps
+    assert spec["fps"] == step * fps and spec["frame_count"] % step == 0, (spec["fps"], fps, spec["frame_count"])
+    out = dict(spec, fps=fps, frame_count=spec["frame_count"] // step, source_fps=spec["fps"],
+               bones={n: {k: (v[::step] if isinstance(v, list) and len(v) == spec["frame_count"] + 1 else v)
+                          for k, v in b.items()} for n, b in spec["bones"].items()})
+    return out
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     jobs = [("ground", "falcon_punch_link_ground", True),
@@ -456,7 +470,7 @@ def main():
     for src, name, rm in jobs:
         fj = MELEE / f"falcon_punch_{src}.json"
         spec = retarget(fj, root_motion=rm, leg_ik=(src == "ground"))
-        (OUT / f"{name}.json").write_text(json.dumps(spec))
+        (OUT / f"{name}.json").write_text(json.dumps(to_fps(spec)))
         rep = max_delta_report(spec)
         worst = sorted(rep.items(), key=lambda kv: -kv[1][0])[:8]
         report[name] = {n: {"max_deg_per_frame": round(v[0], 2), "at_frame": v[1], "max_component_jump_rad": round(v[2], 3)}
@@ -465,7 +479,8 @@ def main():
               [(n, round(v[0], 1), v[1], round(v[2], 2)) for n, v in worst])
         if rm or src == "air":
             render_preview(spec, fj, OUT / f"preview_{src}.png", title=name)
-    render_hand(json.loads((OUT / "falcon_punch_link_ground.json").read_text()), OUT / "preview_fist.png")
+        if name == "falcon_punch_link_ground":
+            render_hand(spec, OUT / "preview_fist.png")
     (OUT / "rotation_delta_report.json").write_text(json.dumps(report, indent=1))
 
 

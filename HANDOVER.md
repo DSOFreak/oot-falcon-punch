@@ -66,22 +66,12 @@ Working directory: `/Games/TF-OOT/falconpunch`.
 |---|---|---|
 | Melee extraction | **Done and verified** (cross-checked decoder; previews show the punch at frames 52–56) | `tools/melee_anim.py`, `hsd_archive.py`, `verify_fobj.py`, `gc_extract.py`; docs in `out/melee/README.md`, `falcon_punch_facts.md`, `bone_map.tsv` |
 | bfres v10.4 read/write | **Done** (byte-identical round-trip; added animations re-parse; **not yet loaded in game**) | `tools/bfres.py`, `bfres_add_anim.py`, `bfres_dump.py`, `bfres_validate.py`, `test_bfres_write.py`; docs in `out/bfres/NOTES.md` |
-| Retarget Falcon → Link | **In progress** in a subagent that will die with the session. It had written `out/retarget/falcon_punch_link_{ground,ground_advancezero,air}.json`, `preview_ground.png` and `tools/retarget_falcon_link.py`, but has **not** reported back. Check the previews and the README it was told to write; finish the remaining items. | see below |
+| Retarget Falcon → Link | **Done** (30 fps, 50 frames; `FalconPunch`, `_AdvanceZero`, `_Air` inserted into a copy of `_04`; **not yet loaded in game**) | `tools/retarget_falcon_link.py`; docs in `out/retarget/README.md` |
 | Enum reverse engineering | Tables and conversion sites mapped; consumers not yet | `tools/a64.py`, `docs/assignable_item_enum.md` |
-
-### Remaining tasks for the retarget
-
-1. Check `out/retarget/preview_*.png`: Link's right fist should thrust forward along +Z at frames 52–56. Also check
-   that no bones flip between frames.
-2. Decide the frame rate: compare the frame counts of Link's animations against real time.
-3. Insert `FalconPunch`, `FalconPunch_AdvanceZero` and `FalconPunch_Air` into a copy of
-   `Player_Adult_04_Animation.anim.bfres`, writing `out/retarget/…bfres(.zs)`. Use:
-   `uv run python tools/bfres_add_anim.py json IN OUT FalconPunch anim.json --fill unpacked/Player_Adult_02_H_Animation.anim.bfres:Hammer_Attack_Vertical_Advance --zs`
-4. Write `out/retarget/README.md`.
 
 ## Next steps (suggested order)
 
-1. **Finish the retarget** (above).
+1. ~~Finish the retarget~~ (done; hit window = anim frames 26–28 at 30 fps).
 2. **First in-game test of the animation (data only, temporary):** a test mod in
    `Hookshot/mods/zz-fp-test/romfs/Model/Player_Adult_04_Animation.anim.bfres.zs`. Point one existing AS state
    (for example `Hammer_Attack_Vertical_Advance`) at `FalconPunch`, which needs an ASB editor or parser (not written
