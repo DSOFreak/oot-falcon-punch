@@ -15,6 +15,7 @@ Modes:
                     under their names to _04 (no AS change).
 """
 import argparse
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -82,6 +83,28 @@ def item_data(romfs, out, t):
         (out / "Mals").mkdir(parents=True, exist_ok=True)
         (out / (rel + ".zs")).write_bytes(zs.compress(new, "x.sarc.zs"))
         grow(t, rel, len(old), len(new))
+
+
+ICON_SRC = "Armor_Adult_Gauntlet_Gold"   # stand-in icon (a fist) until a drawn one exists
+
+
+def item_icon(romfs, out, t, name=CARRIER):
+    """UI/Tex/Icon/<carrier>.bntx: a copy of ICON_SRC with its texture renamed (the name is stored once, at the
+    string table: u16 length + text; the new name is shorter, the rest is zero-padded). New file: new RESTBL entry,
+    the source entry's overhead over its file size kept"""
+    src_rel, rel = f"UI/Tex/Icon/{ICON_SRC}.bntx", f"UI/Tex/Icon/{name}.bntx"
+    d = bytearray(zs.load(str(romfs / (src_rel + ".zs"))))
+    old = ICON_SRC.encode()
+    i = d.find(old)
+    assert i > 0 and d.find(old, i + 1) < 0 and struct.unpack_from("<H", d, i - 2)[0] == len(old), "icon name layout"
+    assert len(name) <= len(old)
+    struct.pack_into("<H", d, i - 2, len(name))
+    d[i:i + len(old)] = name.encode().ljust(len(old), b"\0")
+    (out / rel).parent.mkdir(parents=True, exist_ok=True)
+    (out / (rel + ".zs")).write_bytes(zs.compress(bytes(d), "x.bntx.zs"))
+    if t.get(rel) is None:
+        t.set(rel, t.get(src_rel))
+        print(f"RESTBL {rel}: new entry {t.get(rel)}")
 
 
 def hide_names(data, names):
@@ -153,6 +176,7 @@ def main():
             grow(t, ASNODE, baev_src.stat().st_size, len(baev_new))
         if not a.replace_hammer:
             item_data(romfs, out, t)
+            item_icon(romfs, out, t)
     (out / (P04 + ".zs")).write_bytes(zs.compress(new04, "x.bfres.zs"))
     grow(t, P04, len(p04), len(new04))
     (out / restbl.REL).parent.mkdir(parents=True, exist_ok=True)
