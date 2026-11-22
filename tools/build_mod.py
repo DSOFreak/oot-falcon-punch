@@ -36,6 +36,7 @@ ANIMS = {   # (time-warped to the hammer attack's AS event timing: tools/retarge
     "FalconPunch": "falcon_punch_link_ground_hammertimed.json",
     "FalconPunch_AdvanceZero": "falcon_punch_link_ground_advancezero_hammertimed.json",
     "FalconPunch_Air": "falcon_punch_link_air_hammertimed.json",
+    "FalconPunch_After": "falcon_punch_link_after.json",   # (tools/make_recovery.py)
 }
 
 

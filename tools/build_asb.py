@@ -9,6 +9,8 @@
    IntSelector on bb:UsingItem: VALUE -> a copy of the leaf playing the punch, default -> the original leaf.
    (Copying a node that owns Event nodes crashes the game, whether the Event nodes are shared or copied, so only
    leaves without events are copied.)
+3. Command CutHammerAfter (the hammer's slam) gets a new root selector: VALUE -> FalconPunch_After, default -> the
+   old root.
 --replace-hammer: test mode, the new selectors play the punch for every item (the hammer too), no code change needed.
 """
 import argparse
@@ -31,6 +33,7 @@ def main():
     ap.add_argument("--src", default=os.path.join(ROOT, "unpacked/Player_Adult.root.asb"))
     ap.add_argument("--value", type=int, default=51)
     ap.add_argument("--replace-hammer", action="store_true")
+    ap.add_argument("--no-after", dest="after", action="store_false", help="keep the hammer's follow-through")
     ap.add_argument("--out", default=os.path.join(ROOT, "out/mod/work/Player_Adult.root.asb"))
     ap.add_argument("--baev-src", default=os.path.join(ROOT, "unpacked/Player_Adult.root.baev"))
     ap.add_argument("--baev-out", default=os.path.join(ROOT, "out/mod/work/Player_Adult.root.baev"))
@@ -67,6 +70,17 @@ def main():
                 if c == i:
                     e.set_child(p, k, s)
         wrapped.append((i, s, punch))
+
+    # 3. the follow-through: command CutHammerAfter (the hammer's slam, a slope blender owning AS events) gets a new
+    #    root: VALUE -> FalconPunch_After (a short recovery), default -> the old root
+    if a.after:
+        old = e.command_root("CutHammerAfter")
+        rec = e.clone_node(wrapped[0][2], anim="FalconPunch_After", events="drop")
+        s = e.clone_node(template, events="drop")
+        default = rec if a.replace_hammer else old
+        e.set_body(s, tprefix, {"child": [struct.pack("<iiI", 0, a.value, rec), struct.pack("<iiI", 0, 0, default)]})
+        e.set_command_root("CutHammerAfter", s)
+        print(f"CutHammerAfter: root #{old} -> selector #{s} ([{a.value}] -> FalconPunch_After #{rec})")
 
     data = e.build()
     b = check(data)

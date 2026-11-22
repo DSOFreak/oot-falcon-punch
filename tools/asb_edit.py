@@ -42,6 +42,7 @@ class Editor:
         self.bodies = {}                 # node index -> (prefix bytes, {slot: [entry bytes]})
         self.guid_seed = 0x46504e00      # 'FPN\0'
         self.guid_aliases = []           # (GUID of a copy, GUID of its original)
+        self.command_roots = {}          # command index -> new root node
 
     # -- strings
     def string(self, s):
@@ -130,6 +131,15 @@ class Editor:
         slots["child"][k] = bytes(e)
         self.set_body(i, prefix, slots)
 
+    def set_command_root(self, name, node):
+        """Make `node` the root node of command `name` (u16 at +0x2c of its 0x30-byte record)"""
+        idx = [k for k, c in enumerate(self.a.commands) if c["name"] == name]
+        assert len(idx) == 1, name
+        self.command_roots[idx[0]] = node
+
+    def command_root(self, name):
+        return [c["node"] for c in self.a.commands if c["name"] == name][0]
+
     def guid(self, i):
         """GUID string of node i as BAEV AsNode files hash it (FNV-1a of this text)"""
         w = struct.unpack_from("<IHH8B", self.records[i], 20)
@@ -192,6 +202,8 @@ class Editor:
                 out[node_off + 36 * i:node_off + 36 * (i + 1)] = r
         out += b"\0" * (bodies_at - len(out))
         out += blob
+        for k, node in self.command_roots.items():
+            struct.pack_into("<H", out, self.a.h["cmd_off"] + 0x30 * k + 0x2c, node)
         struct.pack_into("<I", out, hdr["node_off"], node_off)
         struct.pack_into("<I", out, hdr["node_count"], len(self.records))
         struct.pack_into("<I", out, hdr["event_count"],

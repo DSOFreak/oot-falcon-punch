@@ -2,8 +2,8 @@
 # Make/refresh our builder copy with the Falcon Punch C patches hooked in (upstream files stay untouched).
 #   tools/fp_builder.sh [/Games/TF-OOT/fpbuilder]
 set -e
-SRC=/Games/TF-OOT/falconpunch/triforce-appimage
-B=${1:-/Games/TF-OOT/fpbuilder}
+SRC=${FP_BUILDER_SRC:-/Games/TF-OOT/tf07/squashfs-root}   # (the extracted Triforce AppImage: --appimage-extract)
+B=${1:-/Games/TF-OOT/fpbuilder07}
 [ -d "$B" ] || cp -a --reflink=auto "$SRC" "$B"
 N="$B/usr/share/hookshot/nx2"
 cp "$(dirname "$0")/../patches/fp_patches.py" "$N/fp_patches.py"
