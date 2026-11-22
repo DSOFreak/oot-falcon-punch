@@ -72,14 +72,18 @@ Working directory: `/Games/TF-OOT/falconpunch`.
 ## Next steps (suggested order)
 
 1. ~~Finish the retarget~~ (done; hit window = anim frames 26–28 at 30 fps).
-2. **First in-game test of the animation (data only, temporary):** a test mod in
-   `Hookshot/mods/zz-fp-test/romfs/Model/Player_Adult_04_Animation.anim.bfres.zs`. Point one existing AS state
-   (for example `Hammer_Attack_Vertical_Advance`) at `FalconPunch`, which needs an ASB editor or parser (not written
-   yet), or temporarily overwrite the hammer animation's data. Possible blocker:
-   `System/Resource/ResourceSizeTable*.rsizetable.zs` may need a larger entry for the enlarged bfres (as in TotK).
-   Ask the user before creating a mods folder in `Hookshot`, and remind them to remove it afterwards.
+2. ~~First in-game test~~ (done, see `docs/test_environment.md`). **Playable v1:** `tools/build_mod.py` writes
+   `out/mod/FalconPunch/romfs` (punch as `Hammer_Attack_Vertical_Advance(Zero)`, hammer originals renamed, RESTBL
+   grown). Verified in FPTest on 2026-11-22: wind-up and lunge play, then the AS goes on to the hammer's `_After`.
 3. **ASB (AS) format:** write a parser/writer for `AS/*.root.asb` (TotK ASB, see dt-12345's asb tools) so new
-   `FalconPunch` states can be added.
+   `FalconPunch` states can be added. This game's ASB is version `0x41b`; dt-12345/asb asserts `0x417`.
+   `tools/fetch_third_party.sh` clones it to `third_party/` (git-ignored, no upstream license). Running that
+   downloaded code was blocked by the session's permission classifier, so it needs the user's OK or our own parser.
+4a. **Enum candidate:** `SheikahWarp` (stored 45) has no row in PouchActorInfo, and its name has 11 letters, the
+   same as `FalconPunch`. Renaming it in place (name string, hash in `0x83f163c0`, re-sorted index table at
+   `+0xdc`, all in `.rodata`) needs no larger tables. The Triforce build applies in-place exefs `.ips` patches
+   (`nx2/code_mods.py`), so this could ship as a normal mod. Still open: code that switches on 45, and sending its
+   behaviour to Hammer (switch jump tables are in `.rodata` too).
 4. **Enum, option B:**
    - Find every consumer of the stored item value. Use `out/enum_bound_sites.json` and the lifted C, and/or run
      `bin/triforce` under gdb: lifted calls are native C calls, so a breakpoint on `f_82d833b0` gives guest call
