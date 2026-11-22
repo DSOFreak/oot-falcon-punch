@@ -65,3 +65,13 @@ needed because `.pchtxt`/`.ips` code caves are refused by the Triforce build.
 So a distinct item value needs, at each consumer above (and in event-driven code that was not seen in 4 s), a "45
 behaves as 7" mapping. That needs more instructions than an in-place `.ips` can add, unless a site is a switch
 jump table.
+
+## Test: does `ActionGuideType` drive item behaviour? (2026-11-22) — no
+
+- `Item_ScrubBusinessSeed` (value 49) is a real Triforce item ("Business Scrub Seed", X = Summon), not an unused one.
+- With its PouchActorInfo row set to `ActionGuideType: Hammer`, it still did its own action. Behaviour follows the
+  AssignableItem value, which the code checks.
+- The AS selects on `UsingItem` (the same value), so a "hammer variant" with value 7 cannot get its own
+  animations. Two items with value 7 are the same to both the code and the AS. A distinct item needs a distinct
+  value **and** code that treats it as 7. That is C changes in the translated game, more than in-place `.ips` room
+  allows.
