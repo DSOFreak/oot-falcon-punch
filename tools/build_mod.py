@@ -1,18 +1,18 @@
-"""Build the playable mod (v1): the Megaton Hammer's vertical attack plays the Falcon Punch.
+"""Build the mod's RomFS from the player's own game files.
 
-Output: out/mod/FalconPunch/romfs/... (git-ignored: it is built from the player's own game files).
-Copy that FalconPunch folder into <game folder>/mods/ to use it.
+Output: out/mod/FalconPunch/romfs/... (git-ignored: it is built from game data). Copy the FalconPunch folder into
+<game folder>/mods/ to use it.
 
-    uv run python tools/retarget_falcon_link.py   # once: writes out/retarget/falcon_punch_link_*.json
-    uv run python tools/build_mod.py [--romfs /Games/TF-OOT/Hookshot/romfs] [--out out/mod/FalconPunch]
+    uv run python tools/retarget_falcon_link.py      # once: out/retarget/falcon_punch_link_*.json
+    uv run python tools/build_mod.py [--v1 | --replace-hammer] [--romfs ...] [--out out/mod/FalconPunch]
 
-What it writes:
-- Model/Player_Adult_02_H_Animation.anim.bfres.zs: the original, with the names of
-  Hammer_Attack_Vertical_Advance(Zero) changed in place (last letter -> 'Q') so the game no longer finds them there.
-- Model/Player_Adult_04_Animation.anim.bfres.zs: the original plus the retargeted punch under those two names
-  (ground with root motion as _Advance, in place as _AdvanceZero). Anims are bound by name across all the player's
-  anim files, so the AS now plays ours.
-- System/Resource/ResourceSizeTable...rsizetable.zs: the _04 entry grown by the size difference (no dictionary).
+Modes:
+  (default)         the Falcon Punch item: anims FalconPunch* in _04, the AS with [51] branches (tools/build_asb.py),
+                    the Pouch_Amiibo row turned into the item. Needs the code patches (patches/fp_patches.py).
+  --replace-hammer  test: the same files, but the hammer's own vertical attack (UsingItem 7) plays the punch through
+                    the AS. No code change needed: checks the AS editor in game.
+  --v1              the first version: the hammer's vertical attack animations renamed in _02_H and the punch added
+                    under their names to _04 (no AS change).
 """
 import argparse
 import subprocess
@@ -26,9 +26,15 @@ import zs  # noqa: E402
 
 P02 = "Model/Player_Adult_02_H_Animation.anim.bfres"
 P04 = "Model/Player_Adult_04_Animation.anim.bfres"
-ANIMS = {  # game anim name -> retarget output
+ASB = "AS/Player_Adult.root.asb"
+V1_ANIMS = {
     "Hammer_Attack_Vertical_Advance": "falcon_punch_link_ground.json",
     "Hammer_Attack_Vertical_AdvanceZero": "falcon_punch_link_ground_advancezero.json",
+}
+ANIMS = {
+    "FalconPunch": "falcon_punch_link_ground.json",
+    "FalconPunch_AdvanceZero": "falcon_punch_link_ground_advancezero.json",
+    "FalconPunch_Air": "falcon_punch_link_air.json",
 }
 
 
@@ -42,37 +48,57 @@ def hide_names(data, names):
     return bytes(d)
 
 
+def add_anims(p04, anims, work):
+    (work / "p04_orig.bfres").write_bytes(p04)
+    cur = work / "p04_orig.bfres"
+    for i, (name, js) in enumerate(anims.items()):
+        nxt = work / f"p04_{i}.bfres"
+        subprocess.run([sys.executable, str(ROOT / "tools/bfres_add_anim.py"), "json", str(cur), str(nxt), name,
+                        str(ROOT / "out/retarget" / js), "--fill", f"{work / 'p04_orig.bfres'}:Wait"], check=True)
+        cur = nxt
+    return cur.read_bytes()
+
+
+def grow(t, rel, old_size, new_size):
+    e = t.get(rel)
+    t.set(rel, e + max(0, new_size - old_size))
+    print(f"RESTBL {rel}: {e} -> {t.get(rel)}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--romfs", default="/Games/TF-OOT/Hookshot/romfs")
     ap.add_argument("--out", default=str(ROOT / "out/mod/FalconPunch"))
+    ap.add_argument("--v1", action="store_true")
+    ap.add_argument("--replace-hammer", action="store_true")
     a = ap.parse_args()
     romfs, out = Path(a.romfs), Path(a.out) / "romfs"
     work = ROOT / "out/mod/work"
     work.mkdir(parents=True, exist_ok=True)
     (out / "Model").mkdir(parents=True, exist_ok=True)
-
-    p02 = zs.load(str(romfs / (P02 + ".zs")))
-    p04 = zs.load(str(romfs / (P04 + ".zs")))
-    (work / "p04_orig.bfres").write_bytes(p04)
-
-    cur = work / "p04_orig.bfres"
-    for i, (name, js) in enumerate(ANIMS.items()):
-        nxt = work / f"p04_{i}.bfres"
-        subprocess.run([sys.executable, str(ROOT / "tools/bfres_add_anim.py"), "json", str(cur), str(nxt), name,
-                        str(ROOT / "out/retarget" / js), "--fill", f"{work / 'p04_orig.bfres'}:Wait"], check=True)
-        cur = nxt
-    new04 = cur.read_bytes()
-
-    (out / (P02 + ".zs")).write_bytes(zs.compress(hide_names(p02, ANIMS), "x.bfres.zs"))
-    (out / (P04 + ".zs")).write_bytes(zs.compress(new04, "x.bfres.zs"))
-
     t = restbl.load(romfs)
-    old = t.get(P04)
-    t.set(P04, old + len(new04) - len(p04))
+
+    p04 = zs.load(str(romfs / (P04 + ".zs")))
+    if a.v1:
+        p02 = zs.load(str(romfs / (P02 + ".zs")))
+        new04 = add_anims(p04, V1_ANIMS, work)
+        (out / (P02 + ".zs")).write_bytes(zs.compress(hide_names(p02, V1_ANIMS), "x.bfres.zs"))
+    else:
+        (out / (P02 + ".zs")).unlink(missing_ok=True)
+        new04 = add_anims(p04, ANIMS, work)
+        cmd = [sys.executable, str(ROOT / "tools/build_asb.py"), "--out", str(work / "Player_Adult.root.asb")]
+        if a.replace_hammer:
+            cmd.append("--replace-hammer")
+        subprocess.run(cmd, check=True)
+        asb_old = zs.load(str(romfs / (ASB + ".zs")))
+        asb_new = (work / "Player_Adult.root.asb").read_bytes()
+        (out / "AS").mkdir(exist_ok=True)
+        (out / (ASB + ".zs")).write_bytes(zs.compress(asb_new, "x.asb.zs"))
+        grow(t, ASB, len(asb_old), len(asb_new))
+    (out / (P04 + ".zs")).write_bytes(zs.compress(new04, "x.bfres.zs"))
+    grow(t, P04, len(p04), len(new04))
     (out / restbl.REL).parent.mkdir(parents=True, exist_ok=True)
     restbl.save(t, out / restbl.REL)
-    print(f"{P04}: {len(p04)} -> {len(new04)} bytes; RESTBL {old} -> {t.get(P04)}")
     print("mod written to", out.parent)
 
 
