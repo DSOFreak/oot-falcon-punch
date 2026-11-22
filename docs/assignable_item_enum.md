@@ -46,3 +46,22 @@ needed because `.pchtxt`/`.ips` code caves are refused by the Triforce build.
    case (7). Keep identity where it matters: the C-button icon and name, the pouch actor, and the AS animation
    choice.
 3. The AS: new states in `Player_Adult.root.asb` that play `FalconPunch*` when the equipped item is `FalconPunch`.
+
+## Runtime findings (2026-11-22, tools/testenv/memscan.py + HOS_WATCH)
+
+- Guest memory is the memfd `memfd:hookshot-guest` (512 GB, sparse, 39-bit addresses; host = 0x100000000000 +
+  guest). `memscan.py` launches the game as its child, finds the memfd and scans only its populated extents.
+- **The player's current item:** an s32 at heap guest `0x10523069e8`. It held the same address in two runs; it
+  should still be found again each run. Hookshot gives 5, Hammer gives 7 (the stored AssignableItem value). Nearby
+  words at `+0xe0` / `+0xf0` hold copies, and two other heap copies (UI/slots) are not read while playing.
+- **Consumers:** `HOS_WATCH` saw about 120 reads per 4 s (one per frame) from these functions:
+  `f_804a2b30 f_804b9c30 f_804bbe90 f_804c60d0 f_804c6be0 f_804c7120 f_804c7270 f_804c75b0 f_804d74b0 f_804d7690`
+  `f_80818d00 f_80819140 f_80819be0 f_80819fc0 f_8081a7c0 f_8081a890 f_8081abe0 f_8081be30 f_80a614e0 f_80c225d0`
+  `f_832c4c40 f_83034d60 f_830350a0(write on equip) f_830357a0 f_83035fd0 f_83036730`.
+  Most of them inline the field read (`ldr wN, [xM, #0xe8]`). The only getter, `0x83035f9c`, has no direct callers.
+- **The AS** (see tools/asb.py) picks hammer animations with `IntSelector on bb:UsingItem` == 7. There are 189 such
+  selectors, and 109 have a `7` branch. Value 0 = DekuStick, so `bb:UsingItem` is the stored AssignableItem value.
+
+So a distinct item value needs, at each consumer above (and in event-driven code that was not seen in 4 s), a "45
+behaves as 7" mapping. That needs more instructions than an in-place `.ips` can add, unless a site is a switch
+jump table.
