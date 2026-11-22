@@ -46,7 +46,24 @@ def static_bone_from(ba: bfres.BoneAnim, frame=0.0, anim=None):
 
 
 def anim_from_json(name, spec, fill=None, template_flags=0x2200):
-    anim = bfres.anim_from_frames(name, int(spec["frame_count"]), spec["bones"], loop=bool(spec.get("loop")))
+    bones = spec["bones"]
+    if fill is not None:
+        # Omitted channels of a listed bone would otherwise become zero (build_bone_anim's default base),
+        # e.g. a bone given only "r" collapsed onto its parent. Use the fill template's frame-0 value instead.
+        fill_pose = fill.sample(0.0)
+        bones = {}
+        for bname, ch in spec["bones"].items():
+            ch = dict(ch)
+            p = fill_pose.get(bname)
+            n = len(ch.get("frames") or range(int(spec["frame_count"]) + 1))
+            if p is not None:
+                for c in ("s", "t"):
+                    if c not in ch:
+                        ch[c] = [p[c]] * n
+                if "r" not in ch:
+                    ch["r"] = [p["r"]] * n
+            bones[bname] = ch
+    anim = bfres.anim_from_frames(name, int(spec["frame_count"]), bones, loop=bool(spec.get("loop")))
     anim.flags = (template_flags & ~bfres.ANIM_LOOP) | (bfres.ANIM_LOOP if spec.get("loop") else 0)
     if fill is not None:
         have = {ba.name for ba in anim.bone_anims}

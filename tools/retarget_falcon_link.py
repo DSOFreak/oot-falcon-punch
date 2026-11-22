@@ -221,8 +221,156 @@ def quat_continuous(mats, ref=None):
     return np.array(out)
 
 
+# ------------------------------------------------------------------------------------------------ helpers
+# Corrective / secondary "Ph_*" bones that the game's own anims key explicitly.
+# 1) pure twist helpers: linear in the driver's twist about its bone (X) axis. Coefficients were fitted on
+#    game anims (Wait_Service_*, Sword_*, Hammer_*): residual <= 0.5 deg (Arm_1_Assist_B: ~4 deg).
+TWIST_RULES = {}
+for _S in "LR":
+    TWIST_RULES[f"Ph_Wrist_Assist_A_{_S}"] = (f"Wrist_{_S}", 0.72, 0.0)
+    TWIST_RULES[f"Ph_Wrist_Assist_B_{_S}"] = (f"Wrist_{_S}", 0.72, 0.0)
+    TWIST_RULES[f"Ph_Arm_1_Assist_{_S}"] = (f"Arm_1_{_S}", -0.64, 0.0)
+    TWIST_RULES[f"Ph_Arm_1_Assist_B_{_S}"] = (f"Arm_1_{_S}", -0.295, math.radians(-2.1))
+
+
+# 2) everything else (knee/elbow/ankle volume helpers, sleeves, collar, belt, skirt): pose-space lookup
+#    (k nearest game frames by driver-bone local rotation, inverse-distance weighted).
+def helper_drivers(n):
+    S = n[-1] if n[-2:] in ("_L", "_R") else None
+    if n.startswith(("Ph_Pred_Ankle", "Ph_Finger")) or n in TWIST_RULES:
+        return None
+    if "Skirt" in n or "Belt_1" in n or "Belt_2" in n or n.startswith(("Ph_Leg_Support_L", "Ph_Leg_Support_R",
+                                                                       "Ph_Leg_Support_Waist", "Ph_Porch")):
+        return ["Leg_1_L", "Leg_1_R"]
+    if n == "Ph_Belt_A":
+        return ["Spine_1", "Spine_2"]
+    if S and n.startswith(("Ph_Knee", "Ph_Calf", "Ph_Leg_Support_Roll")):
+        return [f"Leg_1_{S}", f"Leg_2_{S}"]
+    if S and n.startswith("Ph_Ankle"):
+        return [f"Leg_2_{S}", f"Ankle_{S}"]
+    if S and n.startswith(("Ph_Sleeve", "Ph_Shlder", "Ph_Clavicle_Assist", "Ph_Eri")):
+        return [f"Clavicle_{S}", f"Arm_1_{S}"]
+    if S and n.startswith("Ph_Elbow"):
+        return [f"Arm_2_{S}"]
+    if S and n.startswith("Ph_Kote"):
+        return [f"Arm_2_{S}", f"Wrist_{S}"]
+    if n == "Ph_ArmStrap":
+        return ["Arm_2_R", "Wrist_R"]
+    if S and n.startswith("Ph_Collar"):
+        return [f"Clavicle_{S}", "Neck"]
+    return None
+
+
+POOL_FILES = ["Player_Adult_02_H_Animation", "Player_Adult_03_Animation", "Player_Adult_04_Animation"]
+POOL_CACHE = OUT / "helper_pool.npz"
+
+
+def build_pool(L, every=6):
+    """Sample local rotations (quat) / translations of drivers + helpers from many game anims."""
+    if POOL_CACHE.exists():
+        z = np.load(POOL_CACHE, allow_pickle=True)
+        return z["names"].tolist(), z["Q"], z["T"]
+    drivers = sorted({m[0] for m in MAP})
+    want = None
+    rows_q, rows_t = [], []
+    for fn in POOL_FILES:
+        bf = bfres.load(ROOT / f"unpacked/{fn}.anim.bfres")
+        for a in bf.skeletal_anims():
+            names_in = {ba.name for ba in a.bone_anims}
+            if want is None:
+                want = drivers + [n for n in L.names if n.startswith("Ph_") and (helper_drivers(n) or n in TWIST_RULES)]
+            if not all(d in names_in for d in drivers):
+                continue
+            bas = [ba for ba in a.bone_anims if ba.name in set(want)]
+            tmp = bfres.SkeletalAnim("", "", a.flags, 0, 0, bas, [])
+            for k in range(0, a.frame_count + 1, every):
+                p = tmp.sample(k)
+                q, t = [], []
+                for n in want:
+                    pp = p.get(n) or {"r": L.rest[n]["r"], "t": L.rest[n]["t"]}
+                    r = pp["r"]
+                    q.append(Rot.from_quat(r).as_quat() if len(r) == 4 else Rot.from_euler("xyz", r).as_quat())
+                    t.append(pp["t"])
+                rows_q.append(q); rows_t.append(t)
+    Q = np.array(rows_q); T = np.array(rows_t)
+    np.savez_compressed(POOL_CACHE, names=np.array(want, dtype=object), Q=Q, T=T)
+    return want, Q, T
+
+
+def twist_angle(Rm, axis=np.array([1.0, 0, 0])):
+    q = Rot.from_matrix(Rm).as_quat()
+    p = axis * (q[:3] @ axis)
+    t = np.array([*p, q[3]])
+    if np.linalg.norm(t) < 1e-9:
+        return math.pi
+    t /= np.linalg.norm(t)
+    a = 2 * math.atan2(t[:3] @ axis, t[3])
+    return (a + math.pi) % (2 * math.pi) - math.pi
+
+
+def drive_helpers(L, poses, root_t, K=8):
+    names, Q, T = build_pool(L)
+    col = {n: i for i, n in enumerate(names)}
+    nfr = len(poses)
+    out = {}
+    # pose-space lookup
+    groups = {}
+    for n in names:
+        d = helper_drivers(n)
+        if d and n in L.idx:
+            groups.setdefault(tuple(d), []).append(n)
+    for drv, hs in groups.items():
+        Dq = Q[:, [col[d] for d in drv]]  # (N, nd, 4)
+        res_R = {h: [] for h in hs}; res_T = {h: [] for h in hs}
+        for k in range(nfr):
+            cur = np.array([Rot.from_matrix(poses[k][d]["R"]).as_quat() for d in drv])  # (nd,4)
+            dots = np.abs(np.einsum("nij,ij->ni", Dq, cur)).clip(0, 1)
+            dist = (2 * np.arccos(dots)).sum(1)
+            nn = np.argsort(dist)[:K]
+            w = 1.0 / (dist[nn] + 0.03) ** 2
+            w /= w.sum()
+            for h in hs:
+                qs = Q[nn, col[h]]
+                qs = qs * np.sign(qs @ qs[0])[:, None]
+                qm = (w[:, None] * qs).sum(0); qm /= np.linalg.norm(qm)
+                res_R[h].append(qm)
+                res_T[h].append((w[:, None] * T[nn, col[h]]).sum(0))
+        for h in hs:
+            qa = np.array(res_R[h]); qa *= np.sign(qa @ qa[0])[:, None]
+            ta = np.array(res_T[h])
+            # light temporal smoothing (1-2-1) against nearest-neighbour switching
+            qs = qa.copy(); ts = ta.copy()
+            qs[1:-1] = qa[:-2] + 2 * qa[1:-1] + qa[2:]
+            ts[1:-1] = (ta[:-2] + 2 * ta[1:-1] + ta[2:]) / 4
+            qs /= np.linalg.norm(qs, axis=1)[:, None]
+            out[h] = ([Rot.from_quat(q).as_matrix() for q in qs], ts)
+    # twist rules
+    for h, (drv, c, b) in TWIST_RULES.items():
+        rest_d = rmat(L.rest[drv]["r"]); rest_h = rmat(L.rest[h]["r"])
+        Rs = []
+        for k in range(nfr):
+            a = twist_angle(rest_d.T @ poses[k][drv]["R"])
+            Rs.append(rest_h @ Rot.from_rotvec([c * a + b, 0, 0]).as_matrix())
+        out[h] = (Rs, np.array([L.rest[h]["t"]] * nfr))
+    # predicted foot plant (game convention: Ph_Pred_Ankle_* = ankle xz of the current/next planted
+    # foot, y fixed 0.103, in Root space)
+    W = [L.fk(p)[1] for p in poses]
+    for S in "LR":
+        ank = np.array([W[k][L.idx[f"Ankle_{S}"]] - root_t[k] for k in range(nfr)])
+        vel = np.r_[np.linalg.norm(np.diff(ank + np.array(root_t), axis=0), axis=1), 0.0]
+        planted = (ank[:, 1] < 0.22) & (vel < 0.01)  # 0.22: Falcon's back foot stands on its toes
+        h0 = L.rest[f"Ph_Pred_Ankle_{S}"]["t"][1]
+        T_ = []
+        for k in range(nfr):
+            j = next((j for j in range(k, nfr) if planted[j]), nfr - 1)
+            p = ank[j] + (np.array(root_t[j]) - np.array(root_t[k]))
+            T_.append([p[0], h0, p[2]])
+        out[f"Ph_Pred_Ankle_{S}"] = ([np.eye(3)] * nfr, np.array(T_))
+    return out
+
+
 # ------------------------------------------------------------------------------------------------ retarget
-def retarget(falcon_json, root_motion=True, leg_ik=True):
+def retarget(falcon_json, root_motion=True, leg_ik=True, helpers_on=True):
     F = Falcon(falcon_json)
     L = Link()
     neutral, quat_bones = sample_pose(*NEUTRAL)
@@ -278,7 +426,7 @@ def retarget(falcon_json, root_motion=True, leg_ik=True):
     order = [n for n in L.names if n in mapped]
     nfr = len(F.frames)
     local_R = {n: [] for n in order}
-    skl_t, root_t = [], []
+    skl_t, root_t, poses = [], [], []
     for k in range(nfr):
         FR, FP = F.fk(F.frames[k])
         trans = FP[F.idx["TransN"]].copy()
@@ -317,6 +465,11 @@ def retarget(falcon_json, root_motion=True, leg_ik=True):
         for n in order:
             local_R[n].append(pose[n]["R"])
         skl_t.append(p_skl); root_t.append(rt)
+        poses.append(pose)
+
+    helpers = drive_helpers(L, poses, root_t) if helpers_on else {}
+    # only bones the game's own anims key (Wait lists 295); the rest are runtime physics bones
+    helpers = {n: v for n, v in helpers.items() if n in neutral}
 
     # ---- JSON
     bones = {}
@@ -325,7 +478,9 @@ def retarget(falcon_json, root_motion=True, leg_ik=True):
             r = quat_continuous(local_R[n], neutral[n]["r"] if n in neutral else None).tolist()
         else:
             r = euler_continuous(local_R[n], base[n]["r0"][:3]).tolist()
-        ent = {"r": r}
+        # always write t (and s): bfres builders default omitted channels to zero, not to the rest pose
+        ent = {"r": r, "t": [list(map(float, base[n]["t"]))] * nfr,
+               "s": [list(map(float, (neutral.get(n) or L.rest[n])["s"]))] * nfr}
         if n == "Skl_Root":
             ent["t"] = [list(map(float, v)) for v in skl_t]
         bones[n] = ent
@@ -334,6 +489,13 @@ def retarget(falcon_json, root_motion=True, leg_ik=True):
         if n in fist:
             p = fist[n]
             bones[n] = {"t": [p["t"]] * nfr, "r": [p["r"]] * nfr, "s": [p["s"]] * nfr}
+    for n, (Rs, Ts) in helpers.items():
+        if quat_bones.get(n):
+            r = quat_continuous(Rs).tolist()
+        else:
+            r = euler_continuous(Rs, base[n]["r0"][:3]).tolist()
+        bones[n] = {"r": r, "t": [list(map(float, v)) for v in Ts],
+                    "s": [list(map(float, (neutral.get(n) or L.rest[n])["s"]))] * nfr}
     spec = {"frame_count": nfr - 1, "loop": False, "fps": 60,
             "source": str(falcon_json), "scale_m_per_melee_unit": scale,
             "fill_template": f"{NEUTRAL[0].name}:{NEUTRAL[1]}", "bones": bones}
