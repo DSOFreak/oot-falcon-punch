@@ -24,3 +24,4 @@ tools/bfrestool/BfresLibrary/
 tools/bfrestool/Libraries/
 tools/bfrestool/App/bin/
 tools/bfrestool/App/obj/
+tools/testenv/*.png
