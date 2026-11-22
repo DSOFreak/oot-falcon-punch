@@ -407,7 +407,7 @@ def render_preview(spec, falcon_json, path, picks=(0, 20, 40, 52, 56, 80, 100), 
                 else:
                     for nm in LINK_DRAW:
                         i = L.idx[nm]; pi = L.parent[i]
-                        if L.names[pi] == "Root" and nm != "Skl_Root":
+                        if L.names[pi] == "Root":
                             continue
                         pa, pb = P[pi], P[i]
                         ax.plot([pa[a], pb[a]], [pa[b], pb[b]], "-", color=SIDE_COL(nm), lw=1.4)
