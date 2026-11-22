@@ -27,14 +27,15 @@ import zs  # noqa: E402
 P02 = "Model/Player_Adult_02_H_Animation.anim.bfres"
 P04 = "Model/Player_Adult_04_Animation.anim.bfres"
 ASB = "AS/Player_Adult.root.asb"
+ASNODE = "AnimationEvent/AsNode/Player_Adult.root.baev"
 V1_ANIMS = {
     "Hammer_Attack_Vertical_Advance": "falcon_punch_link_ground.json",
     "Hammer_Attack_Vertical_AdvanceZero": "falcon_punch_link_ground_advancezero.json",
 }
-ANIMS = {
-    "FalconPunch": "falcon_punch_link_ground.json",
-    "FalconPunch_AdvanceZero": "falcon_punch_link_ground_advancezero.json",
-    "FalconPunch_Air": "falcon_punch_link_air.json",
+ANIMS = {   # (time-warped to the hammer attack's AS event timing: tools/retarget_falcon_link.py HAMMER_KNOTS)
+    "FalconPunch": "falcon_punch_link_ground_hammertimed.json",
+    "FalconPunch_AdvanceZero": "falcon_punch_link_ground_advancezero_hammertimed.json",
+    "FalconPunch_Air": "falcon_punch_link_air_hammertimed.json",
 }
 
 
@@ -86,7 +87,12 @@ def main():
     else:
         (out / (P02 + ".zs")).unlink(missing_ok=True)
         new04 = add_anims(p04, ANIMS, work)
-        cmd = [sys.executable, str(ROOT / "tools/build_asb.py"), "--out", str(work / "Player_Adult.root.asb")]
+        baev_src = work / "Player_Adult.root.baev.orig"
+        baev_src.write_bytes(zs.load(str(romfs / (ASNODE + ".zs"))))
+        cmd = [sys.executable, str(ROOT / "tools/build_asb.py"), "--src", str(work / "Player_Adult.root.asb.orig"),
+               "--out", str(work / "Player_Adult.root.asb"), "--baev-src", str(baev_src),
+               "--baev-out", str(work / "Player_Adult.root.baev")]
+        (work / "Player_Adult.root.asb.orig").write_bytes(zs.load(str(romfs / (ASB + ".zs"))))
         if a.replace_hammer:
             cmd.append("--replace-hammer")
         subprocess.run(cmd, check=True)
@@ -95,6 +101,11 @@ def main():
         (out / "AS").mkdir(exist_ok=True)
         (out / (ASB + ".zs")).write_bytes(zs.compress(asb_new, "x.asb.zs"))
         grow(t, ASB, len(asb_old), len(asb_new))
+        baev_new = (work / "Player_Adult.root.baev").read_bytes()
+        if baev_new != baev_src.read_bytes():
+            (out / ASNODE).parent.mkdir(parents=True, exist_ok=True)
+            (out / (ASNODE + ".zs")).write_bytes(zs.compress(baev_new, "x.baev.zs"))
+            grow(t, ASNODE, baev_src.stat().st_size, len(baev_new))
     (out / (P04 + ".zs")).write_bytes(zs.compress(new04, "x.bfres.zs"))
     grow(t, P04, len(p04), len(new04))
     (out / restbl.REL).parent.mkdir(parents=True, exist_ok=True)

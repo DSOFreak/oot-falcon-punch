@@ -41,6 +41,7 @@ class Editor:
         self.pool_end = self.a.h["string_pool_size"]
         self.bodies = {}                 # node index -> (prefix bytes, {slot: [entry bytes]})
         self.guid_seed = 0x46504e00      # 'FPN\0'
+        self.guid_aliases = []           # (GUID of a copy, GUID of its original)
 
     # -- strings
     def string(self, s):
@@ -129,14 +130,28 @@ class Editor:
         slots["child"][k] = bytes(e)
         self.set_body(i, prefix, slots)
 
-    def clone_node(self, i, anim=None):
-        """A copy of node i (same children); anim: another animation name (SkeletalAnimation). Returns its index"""
+    def guid(self, i):
+        """GUID string of node i as BAEV AsNode files hash it (FNV-1a of this text)"""
+        w = struct.unpack_from("<IHH8B", self.records[i], 20)
+        return "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x" % w
+
+    def clone_node(self, i, anim=None, events="clone"):
+        """A copy of node i (same children); anim: another animation name (SkeletalAnimation). Returns its index.
+        events: what the copy does with the Event nodes in its event slot. Two parents must not share one Event
+        node (the game crashes at load), so 'clone' copies them too (new GUIDs; self.guid_aliases gets
+        (new GUID, old GUID) so the AsNode BAEV can give the copies the same events) and 'drop' leaves them out."""
         rec = bytearray(self.records[i])
         self.guid_seed += 1
         struct.pack_into("<I", rec, 20, self.guid_seed)   # GUID's first word: unique
         j = len(self.records)
         self.records.append(rec)
+        self.guid_aliases.append((self.guid(j), self.guid(i)))
         prefix, slots = self.parse_body(i)
+        if events == "drop":
+            slots["event"] = []
+        else:
+            slots["event"] = [struct.pack("<I", self.clone_node(struct.unpack("<I", ev)[0]))
+                              for ev in slots["event"]]
         if anim is not None:
             t = struct.unpack_from("<H", rec, 0)[0]
             assert t == 3, "anim= only for SkeletalAnimation"
@@ -157,9 +172,11 @@ class Editor:
             out += s.encode() + b"\0"
         struct.pack_into("<I", out, hdr["string_pool_size"], len(out) - self.a.sp)
         out += b"\0" * (-len(out) % 16)
-        # 3. bodies first in a temp layout so the records know their offsets: records go before them
-        node_off = len(out)
-        bodies_at = node_off + 36 * len(self.records)
+        # 2./3. the node table moves to the end only when nodes were added (records first, then the bodies)
+        n_orig = self.a.h["node_count"]
+        relocate = len(self.records) != n_orig or getattr(self, "force_relocate", False)
+        node_off = len(out) if relocate else self.a.h["node_off"]
+        bodies_at = (node_off + 36 * len(self.records)) if relocate else len(out)
         bodies_at += -bodies_at % 16
         blob = bytearray()
         for i in sorted(self.bodies):
@@ -167,12 +184,18 @@ class Editor:
             at = bodies_at + len(blob)
             struct.pack_into("<I", self.records[i], 8, at)
             blob += self.body_bytes(prefix, slots, at)
-        for r in self.records:
-            out += r
+        if relocate:
+            for r in self.records:
+                out += r
+        else:
+            for i, r in enumerate(self.records):
+                out[node_off + 36 * i:node_off + 36 * (i + 1)] = r
         out += b"\0" * (bodies_at - len(out))
         out += blob
         struct.pack_into("<I", out, hdr["node_off"], node_off)
         struct.pack_into("<I", out, hdr["node_count"], len(self.records))
+        struct.pack_into("<I", out, hdr["event_count"],
+                         sum(1 for r in self.records if struct.unpack_from("<H", r, 0)[0] == 10))
         return bytes(out)
 
 

@@ -1,19 +1,22 @@
-"""Player_Adult.root.asb for the Falcon Punch item.
+"""Player_Adult.root.asb (+ its AsNode BAEV) for the Falcon Punch item.
 
-    uv run python tools/build_asb.py [--value 51] [--replace-hammer] [--out out/mod/work/Player_Adult.root.asb]
+    uv run python tools/build_asb.py [--value 51] [--replace-hammer] [--src ...] [--out ...]
 
-- every IntSelector on bb:UsingItem with a branch for 7 (Hammer) gets the same branch for VALUE (the item's stored
-  AssignableItem value), so the item holds, equips and moves like the hammer;
-- where that branch reaches the hammer's vertical attack, VALUE gets a copy of the path whose animations are the
-  Falcon Punch ones (ANIM_MAP); untouched subtrees are shared, not copied.
---replace-hammer: test mode, the hammer's own branch (7) is pointed at the punch path too (no code change needed).
+1. Every IntSelector on bb:UsingItem with a branch for 7 (Hammer) gets the same branch for VALUE (the item's
+   stored AssignableItem value): the item equips, holds, moves and attacks like the hammer, through the hammer's own
+   nodes, so the attack keeps the hammer's AS events (AtCollision 14-24, sounds, cancels: Event node #16179).
+2. Each SkeletalAnimation that plays a hammer vertical attack (ANIM_MAP) is replaced, in its parents, by a new
+   IntSelector on bb:UsingItem: VALUE -> a copy of the leaf playing the punch, default -> the original leaf.
+   (Copying a node that owns Event nodes crashes the game, whether the Event nodes are shared or copied, so only
+   leaves without events are copied.)
+--replace-hammer: test mode, the new selectors play the punch for every item (the hammer too), no code change needed.
 """
 import argparse
 import os
+import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
-import asb as A  # noqa: E402
 from asb_edit import Editor, check  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,63 +32,53 @@ def main():
     ap.add_argument("--value", type=int, default=51)
     ap.add_argument("--replace-hammer", action="store_true")
     ap.add_argument("--out", default=os.path.join(ROOT, "out/mod/work/Player_Adult.root.asb"))
+    ap.add_argument("--baev-src", default=os.path.join(ROOT, "unpacked/Player_Adult.root.baev"))
+    ap.add_argument("--baev-out", default=os.path.join(ROOT, "out/mod/work/Player_Adult.root.baev"))
     a = ap.parse_args()
     e = Editor(open(a.src, "rb").read())
     nodes = e.a.nodes
 
-    contains = {}
-
-    def has_target(i, seen=()):
-        if i in contains:
-            return contains[i]
-        if i in seen:
-            return False
-        n = nodes[i]
-        r = n.get("anim") in ANIM_MAP or any(has_target(c, seen + (i,)) for c in n["children"])
-        contains[i] = r
-        return r
-
-    clones = {}
-
-    def clone_path(i):
-        if not has_target(i):
-            return i
-        if i in clones:
-            return clones[i]
-        n = nodes[i]
-        j = e.clone_node(i, anim=ANIM_MAP.get(n.get("anim")) if n["type"] == 3 else None)
-        clones[i] = j
-        for k, c in enumerate(n["children"]):
-            cc = clone_path(c)
-            if cc != c:
-                e.set_child(j, k, cc)
-        return j
-
+    # 1. [VALUE] next to every UsingItem [7]
     sel = [n for n in nodes if n["type"] == 8 and n["sel"] == "bb:UsingItem"]
-    added = attack = 0
+    template = None
+    added = 0
     for n in sel:
         br = e.int_branches(n["index"])
         vals = [v for v, _ in br]
+        if template is None and not n["events"]:
+            template = n["index"]
         if 7 not in vals or a.value in vals:
             continue
-        tgt = dict((v, t) for v, t in br if v is not None)[7]
-        new = clone_path(tgt)
-        if new != tgt:
-            attack += 1
-            print(f"attack branch: #{n['index']} [7] -> #{tgt}; [{a.value}] -> #{new}")
-            if a.replace_hammer:
-                k = vals.index(7)
-                e.set_child(n["index"], k, new)
-        e.add_int_branch(n["index"], a.value, new)
+        e.add_int_branch(n["index"], a.value, dict((v, t) for v, t in br if v is not None)[7])
         added += 1
+
+    # 2. the attack leaves: a UsingItem selector in front of each
+    tprefix, _ = e.parse_body(template)
+    wrapped = []
+    for leaf in [n for n in nodes if n["type"] == 3 and n.get("anim") in ANIM_MAP]:
+        i = leaf["index"]
+        assert not leaf["events"], f"leaf #{i} owns Event nodes"
+        punch = e.clone_node(i, anim=ANIM_MAP[leaf["anim"]], events="drop")
+        s = e.clone_node(template, events="drop")
+        default = punch if a.replace_hammer else i
+        e.set_body(s, tprefix, {"child": [struct.pack("<iiI", 0, a.value, punch), struct.pack("<iiI", 0, 0, default)]})
+        for p in e.a.parents.get(i, []):
+            for k, c in enumerate(nodes[p]["children"]):
+                if c == i:
+                    e.set_child(p, k, s)
+        wrapped.append((i, s, punch))
+
     data = e.build()
     b = check(data)
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     open(a.out, "wb").write(data)
-    print(f"{added} selectors got [{a.value}] ({attack} to the punch), {len(clones)} nodes cloned, "
-          f"{len(e.new_strings)} new strings; {len(data)} bytes ({len(data) - len(e.d):+d}); nodes {len(b.nodes)}")
-    for i in clones.values():
-        print("  ", b.describe(i))
+    print(f"{added} UsingItem selectors got [{a.value}]; {len(wrapped)} attack leaves wrapped; "
+          f"{len(data)} bytes ({len(data) - len(e.d):+d}); nodes {len(b.nodes)}")
+    for i, s, punch in wrapped:
+        print(f"   #{i} -> {b.describe(s)} {b.nodes[s]['conds']} -> {[b.describe(c) for c in b.nodes[s]['children']]}")
+    # (no copied Event nodes: the AsNode BAEV stays as it is)
+    if os.path.exists(a.baev_src):
+        open(a.baev_out, "wb").write(open(a.baev_src, "rb").read())
 
 
 if __name__ == "__main__":

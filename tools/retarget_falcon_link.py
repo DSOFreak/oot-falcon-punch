@@ -623,6 +623,50 @@ def to_fps(spec, fps=GAME_FPS):
     return out
 
 
+# Hammer timing: the punch shares the hammer attack's AS events (Event node #16179 in Player_Adult.root.asb):
+# AtCollision frames 14-24, EmitEffect 20, AtSound 10, NoChangeAS 0-14, cancels from 40. The punch is time-warped so
+# Melee's hit (f52-56) lands at frames 17-19 and the move ends at 40: (output 30 fps frame, Melee 60 fps frame) knots.
+HAMMER_KNOTS = [(0, 0), (17, 52), (40, 100)]
+
+
+def warp(spec, knots, fps=GAME_FPS):
+    """Resample a 60 fps per-frame spec at piecewise-linear source times (knots: (out frame, source frame)).
+    Channels are interpolated linearly between source frames (Euler values are continuous; quaternions renormalised)"""
+    n_out = knots[-1][0]
+    last = spec["frame_count"]
+
+    def src_time(k):
+        for (o0, s0), (o1, s1) in zip(knots, knots[1:]):
+            if o0 <= k <= o1:
+                return s0 + (s1 - s0) * (k - o0) / (o1 - o0)
+        return knots[-1][1]
+
+    def sample(v, t):
+        t = min(max(t, 0.0), last)
+        i = min(int(t), last - 1)
+        f = t - i
+        a, b = v[i], v[i + 1]
+        if not isinstance(a, list):
+            return a + (b - a) * f
+        r = [x + (y - x) * f for x, y in zip(a, b)]
+        if len(r) == 4:   # (rotation as a quaternion: clavicles)
+            n = max(1e-9, sum(x * x for x in r) ** 0.5)
+            r = [x / n for x in r]
+        return r
+
+    times = [src_time(k) for k in range(n_out + 1)]
+    bones = {}
+    for name, b in spec["bones"].items():
+        nb = {}
+        for key, v in b.items():
+            if isinstance(v, list) and len(v) == last + 1:
+                nb[key] = [sample(v, t) for t in times]
+            else:
+                nb[key] = v
+        bones[name] = nb
+    return dict(spec, fps=fps, frame_count=n_out, source_fps=spec["fps"], bones=bones, time_knots=knots)
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     jobs = [("ground", "falcon_punch_link_ground", True),
@@ -633,6 +677,7 @@ def main():
         fj = MELEE / f"falcon_punch_{src}.json"
         spec = retarget(fj, root_motion=rm, leg_ik=(src == "ground"))
         (OUT / f"{name}.json").write_text(json.dumps(to_fps(spec)))
+        (OUT / f"{name}_hammertimed.json").write_text(json.dumps(warp(spec, HAMMER_KNOTS)))
         rep = max_delta_report(spec)
         worst = sorted(rep.items(), key=lambda kv: -kv[1][0])[:8]
         report[name] = {n: {"max_deg_per_frame": round(v[0], 2), "at_frame": v[1], "max_component_jump_rad": round(v[2], 3)}

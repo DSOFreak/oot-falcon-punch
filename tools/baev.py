@@ -74,13 +74,23 @@ class Baev:
         return None
 
     def alias(self, new_anim, existing_anim):
-        """Give new_anim the same event nodes as existing_anim (same index array). Appends a new EventInfo array"""
+        """Give new_anim the same event nodes as existing_anim (same index array)"""
+        return self.alias_hashes([(fnv1a(new_anim), fnv1a(existing_anim))])
+
+    def alias_hashes(self, pairs):
+        """[(new hash, existing hash)]: each new key gets the existing key's event nodes (shared index array).
+        Existing keys without events are skipped. Appends one new, sorted EventInfo array. Returns the count added"""
         infos = self.infos()
-        src = [x for x in infos if x[0] == fnv1a(existing_anim)]
-        assert src, existing_anim
-        h = fnv1a(new_anim)
-        assert all(x[0] != h for x in infos), new_anim + " already has events"
-        rows = [(x[0], x[2], len(x[1])) for x in infos] + [(h, src[0][2], len(src[0][1]))]
+        have = {x[0]: (x[2], len(x[1])) for x in infos}
+        rows = [(x[0], x[2], len(x[1])) for x in infos]
+        added = 0
+        for new_h, old_h in pairs:
+            if old_h not in have:
+                continue
+            assert new_h not in have, hex(new_h)
+            rows.append((new_h,) + have[old_h])
+            have[new_h] = have[old_h]
+            added += 1
         rows.sort()
         while len(self.d) % 8:
             self.d += b"\0"
@@ -89,7 +99,7 @@ class Baev:
             self.d += struct.pack("<IIQII", hh, 0, io, n, 4)
         struct.pack_into("<QII", self.d, self.info_at, at, len(rows), 0x18)
         struct.pack_into("<I", self.d, 8, len(self.d))   # file size
-        return self
+        return added
 
     def to_bytes(self):
         return bytes(self.d)
