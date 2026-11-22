@@ -27,7 +27,9 @@ def quat(r):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--frames", type=int, default=14)
+    ap.add_argument("--frames", type=int, default=14, help="blend length")
+    ap.add_argument("--total", type=int, default=46, help="anim length: the hammer's follow-through state ends by its "
+                    "AnmSeqCancel event at frame 44, so the anim has to reach it (the end pose is held)")
     ap.add_argument("--punch", default=str(ROOT / "out/retarget/falcon_punch_link_ground_hammertimed.json"))
     ap.add_argument("--p02", default=str(ROOT / "unpacked/Player_Adult_02_H_Animation.anim.bfres"))
     ap.add_argument("--p04", default=str(ROOT / "unpacked/Player_Adult_04_Animation.anim.bfres"))
@@ -47,7 +49,7 @@ def main():
                                         for k, v in b.items() if k in ("r", "t", "s")})
 
     n = a.frames
-    w = [3 * (k / n) ** 2 - 2 * (k / n) ** 3 for k in range(n + 1)]
+    w = [3 * (k / n) ** 2 - 2 * (k / n) ** 3 for k in range(n + 1)] + [1.0] * (a.total - n)
     bones = {}
     for name, e in end.items():
         s = start.get(name, e)
@@ -59,12 +61,12 @@ def main():
         t = [list(map(float, ts + (te - ts) * x)) for x in w]
         sc = [list(map(float, ss + (se - ss) * x)) for x in w]
         if name == "Root":
-            t = [list(map(float, te))] * (n + 1)
+            t = [list(map(float, te))] * len(w)
         bones[name] = {"r": r, "t": t, "s": sc}
-    out = dict(frame_count=n, loop=False, fps=30, source=f"blend {Path(a.punch).name}[{last}] -> {a.end_anim}[end]",
+    out = dict(frame_count=len(w) - 1, loop=False, fps=30, source=f"blend {Path(a.punch).name}[{last}] -> {a.end_anim}[end]",
                bones=bones)
     Path(a.out).write_text(json.dumps(out))
-    print(f"wrote {a.out}: {n} frames, {len(bones)} bones")
+    print(f"wrote {a.out}: {len(w) - 1} frames ({n} blending), {len(bones)} bones")
 
 
 if __name__ == "__main__":

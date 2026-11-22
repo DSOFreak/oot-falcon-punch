@@ -9,8 +9,8 @@
    IntSelector on bb:UsingItem: VALUE -> a copy of the leaf playing the punch, default -> the original leaf.
    (Copying a node that owns Event nodes crashes the game, whether the Event nodes are shared or copied, so only
    leaves without events are copied.)
-3. Command CutHammerAfter (the hammer's slam) gets a new root selector: VALUE -> FalconPunch_After, default -> the
-   old root.
+3. The follow-through (command CutHammerAfter): each slope leaf of its blender gets a UsingItem selector,
+   VALUE -> FalconPunch_After, default -> the leaf (the blender keeps the events that end the state).
 --replace-hammer: test mode, the new selectors play the punch for every item (the hammer too), no code change needed.
 """
 import argparse
@@ -71,16 +71,19 @@ def main():
                     e.set_child(p, k, s)
         wrapped.append((i, s, punch))
 
-    # 3. the follow-through: command CutHammerAfter (the hammer's slam, a slope blender owning AS events) gets a new
-    #    root: VALUE -> FalconPunch_After (a short recovery), default -> the old root
+    # 3. the follow-through (command CutHammerAfter): its slope blender owns the events that end the state
+    #    (AnmSeqCancel at 44, cancels, FootIK), so it stays; each of its leaves gets a UsingItem selector:
+    #    VALUE -> FalconPunch_After (a recovery, long enough to reach frame 44), default -> the slope leaf
     if a.after:
-        old = e.command_root("CutHammerAfter")
+        blender = e.command_root("CutHammerAfter")
         rec = e.clone_node(wrapped[0][2], anim="FalconPunch_After", events="drop")
-        s = e.clone_node(template, events="drop")
-        default = rec if a.replace_hammer else old
-        e.set_body(s, tprefix, {"child": [struct.pack("<iiI", 0, a.value, rec), struct.pack("<iiI", 0, 0, default)]})
-        e.set_command_root("CutHammerAfter", s)
-        print(f"CutHammerAfter: root #{old} -> selector #{s} ([{a.value}] -> FalconPunch_After #{rec})")
+        for k, leaf in enumerate(nodes[blender]["children"]):
+            s = e.clone_node(template, events="drop")
+            default = rec if a.replace_hammer else leaf
+            e.set_body(s, tprefix, {"child": [struct.pack("<iiI", 0, a.value, rec), struct.pack("<iiI", 0, 0, default)]})
+            e.set_child(blender, k, s)
+        print(f"CutHammerAfter: {len(nodes[blender]['children'])} slope leaves of #{blender} wrapped "
+              f"([{a.value}] -> FalconPunch_After #{rec})")
 
     data = e.build()
     b = check(data)
