@@ -40,6 +40,50 @@ ANIMS = {   # (time-warped to the hammer attack's AS event timing: tools/retarge
 }
 
 
+RSDB_POUCH = "RSDB/PouchActorInfo.Product.111.rstbl.byml"
+CARRIER = "Pouch_Amiibo"   # the item row/actor the Falcon Punch takes over (stored AssignableItem value 51)
+ITEM_ROW = {"PouchSpecialDeal": "None", "ActionGuideType": "Hammer", "PouchGetType": "Large"}
+ITEM_ROW_DROP = ("IsUsableSelectItemInWater",)
+TEXT = {   # Mals/<lang>.Product.110.sarc -> ActorMsg/PouchContent.msbt
+    f"{CARRIER}_Name": "Falcon Punch",
+    f"{CARRIER}_Caption": "Gather the power of the falcon in\nyour fist and unleash it in one\ndevastating, fiery punch!",
+}
+TEXT_LANGS = ("USen", "EUen")
+
+
+def item_data(romfs, out, t):
+    """The carrier row in PouchActorInfo (plain zstd, no dictionary) and the item's name/caption"""
+    import byml7
+    import oead
+    import zstandard
+    import msbt
+    rows = byml7.load(zs.load(str(romfs / (RSDB_POUCH + ".zs"))))
+    for r in rows:
+        if str(r["__RowId"]) == CARRIER:
+            for k, v in ITEM_ROW.items():
+                r[k] = v
+            for k in ITEM_ROW_DROP:
+                if k in r:
+                    del r[k]
+    raw = byml7.dump(rows)
+    (out / "RSDB").mkdir(parents=True, exist_ok=True)
+    (out / (RSDB_POUCH + ".zs")).write_bytes(zstandard.ZstdCompressor(level=19).compress(raw))
+    grow(t, RSDB_POUCH, len(zs.load(str(romfs / (RSDB_POUCH + ".zs")))), len(raw))
+    for lang in TEXT_LANGS:
+        rel = f"Mals/{lang}.Product.110.sarc"
+        old = zs.load(str(romfs / (rel + ".zs")))
+        sarc = oead.Sarc(old)
+        w = oead.SarcWriter.from_sarc(sarc)
+        m = msbt.Msbt(bytes(sarc.get_file("ActorMsg/PouchContent.msbt").data))
+        for label, text in TEXT.items():
+            m.set_text(label, text)
+        w.files["ActorMsg/PouchContent.msbt"] = m.to_bytes()
+        new = bytes(w.write()[1])
+        (out / "Mals").mkdir(parents=True, exist_ok=True)
+        (out / (rel + ".zs")).write_bytes(zs.compress(new, "x.sarc.zs"))
+        grow(t, rel, len(old), len(new))
+
+
 def hide_names(data, names):
     d = bytearray(data)
     for n in names:
@@ -107,6 +151,8 @@ def main():
             (out / ASNODE).parent.mkdir(parents=True, exist_ok=True)
             (out / (ASNODE + ".zs")).write_bytes(zs.compress(baev_new, "x.baev.zs"))
             grow(t, ASNODE, baev_src.stat().st_size, len(baev_new))
+        if not a.replace_hammer:
+            item_data(romfs, out, t)
     (out / (P04 + ".zs")).write_bytes(zs.compress(new04, "x.bfres.zs"))
     grow(t, P04, len(p04), len(new04))
     (out / restbl.REL).parent.mkdir(parents=True, exist_ok=True)
