@@ -75,3 +75,18 @@ jump table.
   animations. Two items with value 7 are the same to both the code and the AS. A distinct item needs a distinct
   value **and** code that treats it as 7. That is C changes in the translated game, more than in-place `.ips` room
   allows.
+
+## Findings for the rebuild route (2026-11-22)
+
+- **Identity follows the value.** With `Pouch_Amiibo` set to `AssignableItem: Hammer`, the wheel lists it as
+  "amiibo" (the name comes from the actor), but the equipped HUD says "Megaton Hammer / Hit" and the icon is blank.
+  Two items with one value are one item to the HUD and the AS.
+- **The carrier:** `Pouch_Amiibo` (value 51) has a pouch row, a pack and GameData (`IsGet`, `PouchData`). With
+  `PouchSpecialDeal: None` it shows in the wheel (name "amiibo", amiibo icon). Equipped it shows "X Activate"
+  (value 51 behaviour).
+- **Slot layout:** the item-slot object holds the per-button assignments at +220…+244. `f_83036730` maps item to
+  button: +232 gives button 7 (the use slot), +224 gives 1, +240 gives 10, and so on.
+- **Animation events** (hits, sounds) are in `AnimationEvent/Animation/<anim file>.anim.baev` (BFFH), keyed by
+  FNV-1a-32 of the animation name. The hammer attack's events are in `_02_H`'s file, and our `_04` animations have
+  none. That also holds for v1, which plays without the hammer's hit events. Adding `FalconPunch` events needs a
+  BAEV editor.
