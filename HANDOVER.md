@@ -69,40 +69,40 @@ Working directory: `/Games/TF-OOT/falconpunch`.
 | Retarget Falcon → Link | **Done** (30 fps, 50 frames; `FalconPunch`, `_AdvanceZero`, `_Air` inserted into a copy of `_04`; **not yet loaded in game**) | `tools/retarget_falcon_link.py`; docs in `out/retarget/README.md` |
 | Enum reverse engineering | Tables and conversion sites mapped; consumers not yet | `tools/a64.py`, `docs/assignable_item_enum.md` |
 
-## Next steps (suggested order)
+## Current state (2026-11-22, Triforce v0.7.0)
 
-1. ~~Finish the retarget~~ (done; hit window = anim frames 26–28 at 30 fps).
-2. ~~First in-game test~~ (done, see `docs/test_environment.md`). **Playable v1:** `tools/build_mod.py` writes
-   `out/mod/FalconPunch/romfs` (punch as `Hammer_Attack_Vertical_Advance(Zero)`, hammer originals renamed, RESTBL
-   grown). Verified in FPTest on 2026-11-22: wind-up and lunge play, then the AS goes on to the hammer's `_After`.
-3. **ASB (AS) format:** write a parser/writer for `AS/*.root.asb` (TotK ASB, see dt-12345's asb tools) so new
-   `FalconPunch` states can be added. This game's ASB is version `0x41b`; dt-12345/asb asserts `0x417`.
-   `tools/fetch_third_party.sh` clones it to `third_party/` (git-ignored, no upstream license). Running that
-   downloaded code was blocked by the session's permission classifier, so it needs the user's OK or our own parser.
-4a. **Enum candidate:** `SheikahWarp` (stored 45) has no row in PouchActorInfo, and its name has 11 letters, the
-   same as `FalconPunch`. Renaming it in place (name string, hash in `0x83f163c0`, re-sorted index table at
-   `+0xdc`, all in `.rodata`) needs no larger tables. The Triforce build applies in-place exefs `.ips` patches
-   (`nx2/code_mods.py`), so this could ship as a normal mod. Still open: code that switches on 45, and sending its
-   behaviour to Hammer (switch jump tables are in `.rodata` too).
-4. **Enum, option B:**
-   - Find every consumer of the stored item value. Use `out/enum_bound_sites.json` and the lifted C, and/or run
-     `bin/triforce` under gdb: lifted calls are native C calls, so a breakpoint on `f_82d833b0` gives guest call
-     chains through backtraces.
-   - Write `nx2`-style patch scripts that add `FalconPunch` (index 55 / stored 54 / its mmh3 hash) to the conversion
-     sites, and send the behaviour to Hammer (7) except where identity matters (icon, name, pouch actor, AS choice).
-   - Keep these patches as a separate script in the repo (for example `patches/fp_patches.py`) that edits our copy
-     of the builder's `nx2/`, so it can be applied again to a new Triforce version.
-5. **Data for the new item:**
-   - `Item_FalconPunch`, `Pouch_FalconPunch` and `Weapon_FalconPunch` packs, cloned from the Hammer: an invisible
-     weapon with the attack shape on `Weapon_R`/`Wrist_R`, and the hitbox active on the frames from
-     `falcon_punch_facts.md`.
-   - PouchActorInfo rows, GameData (`IsGet.*`, `PouchData.*`, and `FalconPunch` added to the `RawValues` of the
-     C-button enums), the icon, the message text, and a way to obtain it (a cheat, chest or shop).
-   - Optional: the fire/falcon effect (`EfCaData.dat`) and the voice clips (`captain.ssm`, ids 60025/60052).
+The user chose the **rebuild route** (a real new item, built with our own builder copy). Architecture:
 
-Regenerate `out/enum_bound_sites.json` with a capstone/numpy scan over `image.bin` (see `tools/a64.py`). Match
-`(w & 0xFFFFFC1F) == 0x7100001F | imm << 10` for `imm` in 0x34–0x37, followed by `b.cond`, and flag a `br` within
-14 instructions.
+| Part | How | Where |
+|---|---|---|
+| Item identity | takes over `Pouch_Amiibo` (stored AssignableItem **51**; has pouch row, pack, GameData) | `tools/build_mod.py` item mode |
+| Name / caption | `ActorMsg/PouchContent.msbt` in `Mals/USen`, `EUen` | `tools/msbt.py` |
+| Icon | `UI/Tex/Icon/Pouch_Amiibo.bntx` = Golden Gauntlets icon, renamed (stand-in) | `build_mod.item_icon` |
+| Game logic | C patch: `fp_item()` maps 51 -> 7 at every load of `player+0x7d8` (current item) in 88 functions | `patches/fp_patches.py`, `tools/find_item_sites.py` |
+| Animations | AS: `[51]` next to all 109 `UsingItem [7]` branches; the 3 vertical-attack leaves and the 9 follow-through leaves wrapped in `UsingItem` selectors (51 -> punch / recovery) | `tools/build_asb.py`, `tools/asb_edit.py` |
+| Punch anims | `FalconPunch*` in `_04`, time-warped to the hammer's AS event timing (hit f17, 40 frames); `FalconPunch_After` recovery (46 f) | `tools/retarget_falcon_link.py` (`warp`), `tools/make_recovery.py` |
+
+Builder: `tools/fp_builder.sh` makes `/Games/TF-OOT/fpbuilder07` (extracted v0.7.0 AppImage + our hook in
+`nx2/chunks.py`). Rebuild the test copy: `/Games/TF-OOT/fpbuilder07/AppRun --cli --update /Games/TF-OOT/FPTest
+--no-prepare-shaders` (shares `~/.cache/triforce-build`; a few changed files take about 4-15 min).
+
+Hard-won rules (ASB 0x41b):
+- Appending is safe: bodies, strings, a relocated node table, new nodes.
+- A node that owns **Event nodes** (event slot) cannot be copied: sharing its Event nodes or copying them (new GUIDs,
+  header 0x1c raised) crashes at load. Only copy event-free leaves; insert selectors above/below instead.
+- Event nodes are placeholders (index 0xffff); their real events are in `AnimationEvent/AsNode/*.root.baev`, keyed by
+  FNV-1a of the node GUID text (`tools/baev.py`). The hammer attack's events (AtCollision 14-24, AtSound 10,
+  EmitEffect 20, cancels 40) live on Event node #16179 under blender #16176.
+- The follow-through state ends by AnmSeqCancel@44 on its blender (#17398), so its leaves are wrapped, not the blender.
+
+Open:
+1. **In-game test of the C patch** (FPTest built with it): equip "Falcon Punch" (amiibo slot, far right of the wheel),
+   press the item button; expect hammer behaviour with the punch animation. If the AS sees 7 instead of 51, find the
+   `UsingItem` blackboard write and exempt it.
+2. Weapon model: the hammer may show in Link's hand for 51; make it invisible (weapon actor/model for the item).
+3. A way to obtain it for real saves (save editor `tools/progress_sav.py`, or a chest/shop), more languages, a drawn
+   icon, sounds/effect (falcon voice, fire).
+4. Saves: v0.7 keeps them in `$XDG_DATA_HOME/triforce/user/...` (test copy: `/Games/TF-OOT/fptest-data/triforce`).
 
 ## Conventions
 

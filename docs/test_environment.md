@@ -4,7 +4,7 @@ Nothing here touches `/Games/TF-OOT/Hookshot` or the player's real saves.
 
 - **Game copy:** `/Games/TF-OOT/FPTest`, a btrfs reflink copy of `Hookshot` (`cp -a --reflink=always`, about 11 s,
   almost no extra space). Test mods go in `FPTest/mods/<name>/romfs/...`.
-- **Save copy:** `/Games/TF-OOT/fptest-data/hookshot`, a copy of `~/.local/share/hookshot`. The game takes
+- **Save copy:** `/Games/TF-OOT/fptest-data/triforce/user` since v0.7 (before: `.../hookshot`), a copy of the real saves. The game takes
   `$XDG_DATA_HOME/hookshot`. It mounts `save-tx/<id>/work`, so patch both `save/` and `save-tx/.../work`.
 - **Launch:** `tools/testenv/launch.sh`. It sets `HOOKSHOT_NO_UPDATE_CHECK=1`; otherwise a zenity "update to v0.6.0?"
   dialog blocks the start, with *Update now* preselected, so never confirm it. The log goes to **stdout**
