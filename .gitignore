@@ -1,0 +1,26 @@
+# Game data and anything derived from it never goes in the repository
+melee/
+unpacked/
+liftwork/
+triforce-appimage/
+out/**
+!out/**/
+!out/**/*.md
+!out/**/*.tsv
+*.bfres
+*.zs
+*.dat
+*.glb
+*.ciso
+*.iso
+
+# Python / tooling
+.venv/
+__pycache__/
+*.pyc
+
+# Third-party checkouts and build output
+tools/bfrestool/BfresLibrary/
+tools/bfrestool/Libraries/
+tools/bfrestool/App/bin/
+tools/bfrestool/App/obj/

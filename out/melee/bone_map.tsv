@@ -1,0 +1,64 @@
+index	name	parent	common_part	decomp_enum_name	rest_world_pos	note
+0	TopN	None	0	TopN	0.000,0.000,0.000	
+1	TransN	0	1	TransN	0.000,0.000,0.000	
+2	XRotN	1	2	XRotN	0.000,13.847,-0.488	
+3	YRotN	2	3	YRotN	0.000,13.835,-0.492	
+4	HipN	3	4	HipN	0.000,12.647,-0.478	
+5	Ca_HipSideN	4	None	None	-1.727,13.099,-0.613	Ca_HipSideN (belt/holster piece, has mesh)
+6	LLegJA	4	6	LLegJA	1.105,11.995,-0.551	
+7	LLegJ	6	7	LLegJ	1.105,11.995,-0.551	
+8	LKneeJ	7	8	LKneeJ	1.534,6.921,-0.589	
+9	LFootJA	8	9	LFootJA	2.007,1.337,-1.412	
+10	LFootJ	9	10	LFootJ	2.007,1.337,-1.412	
+11	Ca_LToeN	10	None	None	2.278,0.542,0.005	Ca_LToeN
+12	RLegJA	4	11	RLegJA	-1.105,11.995,-0.551	
+13	RLegJ	12	12	RLegJ	-1.105,11.995,-0.551	
+14	RKneeJ	13	13	RKneeJ	-1.534,6.920,-0.587	
+15	RFootJA	14	14	RFootJA	-2.007,1.337,-1.412	
+16	RFootJ	15	15	RFootJ	-2.007,1.337,-1.412	
+17	Ca_RToeN	16	None	None	-2.290,0.555,0.004	Ca_RToeN
+18	WaistN2	4	16	BustN	-0.000,14.078,-0.518	
+19	BustN	18	17	LShoulderN	0.000,15.538,-0.668	
+20	Ca_CollarN	19	None	None	0.000,18.338,-0.916	Ca_CollarN (above chest, no children)
+21	LShoulderN	19	18	LShoulderJA	1.000,17.767,-0.774	
+22	LShoulderJA	21	19	LShoulderJ	2.900,17.812,-0.792	
+23	LShoulderJ	22	20	LArmJ	2.900,17.812,-0.792	
+24	LArmJ	23	21	LHandN	6.046,17.807,-0.891	
+25	LHandN	24	22	L1stNa	9.608,17.752,-0.836	
+26	L1stNa	25	23	L1stNb	11.290,17.903,-0.270	
+27	L1stNb	26	24	L2ndNa	11.954,17.841,-0.251	
+28	L2ndNa	25	25	L2ndNb	11.366,17.910,-0.648	
+29	L2ndNb	28	26	L3rdNa	12.026,17.897,-0.678	
+30	L3rdNa	25	27	L3rdNb	11.303,17.918,-1.060	
+31	L3rdNb	30	28	L4thNa	11.863,17.917,-1.070	
+32	L4thNa	25	29	L4thNb	11.208,17.845,-1.411	
+33	L4thNb	32	30	LThumbNa	11.649,17.804,-1.443	
+34	Ca_LHandAuxN	25	None	None	9.997,17.712,-0.770	Ca_LHandAuxN (near left wrist)
+35	LThumbNa	25	32	LHandNb	10.482,17.357,0.121	
+36	LThumbNb	35	33	NeckN	11.154,17.236,0.276	
+37	Ca_LShoulderPadN	21	None	None	2.800,17.827,-0.874	Ca_LShoulderPadN
+38	NeckN	19	34	HeadN	0.000,18.658,-0.809	
+39	HeadN	38	35	RShoulderN	0.000,19.358,-0.609	
+40	Ca_HeadFrontN_a	39	None	None	0.000,19.610,-0.204	Ca_HeadFrontN_a
+41	Ca_HeadFrontN_b	39	None	None	0.000,19.610,-0.204	Ca_HeadFrontN_b
+42	RShoulderN	19	36	RShoulderJA	-1.000,17.767,-0.774	
+43	Ca_RShoulderMeshN	42	None	None	-2.200,18.367,-0.774	Ca_RShoulderMeshN (has mesh)
+44	RShoulderJA	42	37	RShoulderJ	-2.900,17.812,-0.792	
+45	RShoulderJ	44	38	RArmJ	-2.900,17.812,-0.792	
+46	RArmJ	45	39	RHandN	-6.046,17.807,-0.795	
+47	RHandN	46	40	R1stNa	-9.607,17.752,-0.834	
+48	R1stNa	47	41	R1stNb	-11.288,17.902,-0.267	
+49	R1stNb	48	42	R2ndNa	-11.921,17.824,-0.260	
+50	R2ndNa	47	43	R2ndNb	-11.365,17.910,-0.646	
+51	R2ndNb	50	44	R3rdNa	-12.025,17.895,-0.675	
+52	R3rdNa	47	45	R3rdNb	-11.301,17.918,-1.057	
+53	R3rdNb	52	46	R4thNa	-11.862,17.918,-1.067	
+54	R4thNa	47	47	R4thNb	-11.207,17.847,-1.408	
+55	R4thNb	54	48	RThumbNa	-11.648,17.806,-1.440	
+56	Ca_RHandAuxN	47	None	None	-9.996,17.712,-0.768	Ca_RHandAuxN (near right wrist)
+57	RHaveN	47	49	RThumbNb	-11.376,17.660,-0.659	
+58	RThumbNa	47	50	RHandNb	-10.481,17.355,0.122	
+59	RThumbNb	58	51	ThrowN	-11.131,17.256,0.232	
+60	Ca_RShoulderPadN	42	None	None	-2.800,17.827,-0.874	Ca_RShoulderPadN
+61	ThrowN	3	52	TransN2	0.000,-0.000,-0.000	
+62	Extra	0	53	FtPart_53	0.000,0.000,0.000	
