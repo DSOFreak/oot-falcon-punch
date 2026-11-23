@@ -161,6 +161,7 @@ def main():
     ap.add_argument("--out", default=str(ROOT / "out/mod/FalconPunch"))
     ap.add_argument("--v1", action="store_true")
     ap.add_argument("--replace-hammer", action="store_true")
+    ap.add_argument("--asb", action="append", default=[], help="extra option for tools/build_asb.py (e.g. --asb=--no-after)")
     a = ap.parse_args()
     romfs, out = Path(a.romfs), Path(a.out) / "romfs"
     work = ROOT / "out/mod/work"
@@ -184,6 +185,7 @@ def main():
         (work / "Player_Adult.root.asb.orig").write_bytes(zs.load(str(romfs / (ASB + ".zs"))))
         if a.replace_hammer:
             cmd.append("--replace-hammer")
+        cmd += a.asb
         subprocess.run(cmd, check=True)
         asb_old = zs.load(str(romfs / (ASB + ".zs")))
         asb_new = (work / "Player_Adult.root.asb").read_bytes()

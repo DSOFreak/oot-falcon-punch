@@ -118,6 +118,15 @@ def main():
                         got = page.view("<u4")[off >> 2] if True else None
                     keep.append(sel[got == (v & 0xFFFFFFFF if state_dt[0] != "u1" else v)])
                 cand = np.concatenate(keep) if keep else np.zeros(0, np.int64)
+            elif line[0] == "sym":   # sym NAME [bytes]: a host variable of the game binary (nm), e.g. fp_punch_equipped
+                n = int(line[2], 0) if len(line) > 2 else 4
+                nm = subprocess.run(["nm", f"{GAME}/bin/triforce"], capture_output=True, text=True).stdout
+                off = next(int(l.split()[0], 16) for l in nm.splitlines() if l.split()[-1] == line[1])
+                base = next(int(l.split("-")[0], 16) for l in open(f"/proc/{p.pid}/maps") if "bin/triforce" in l)
+                with open(f"/proc/{p.pid}/mem", "rb") as m:
+                    m.seek(base + off)
+                    b = m.read(n)
+                log(f"{line[1]} @{base + off:x}: {b.hex(' ')} ({int.from_bytes(b[:4], 'little', signed=True)})")
             elif line[0] == "read":
                 a, n = int(line[1], 16), int(line[2], 0)
                 b = read(BASE + a, n)
