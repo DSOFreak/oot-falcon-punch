@@ -149,9 +149,13 @@ def add_anims(p04, anims, work):
     return cur.read_bytes()
 
 
+SLACK = {P04: 4 << 20, ASB: 4 << 20}   # (the entry sizes the resource's heap: the game puts more than the file in it,
+                                       #  e.g. _04's model buffer, which did not fit with the growth alone)
+
+
 def grow(t, rel, old_size, new_size):
     e = t.get(rel)
-    t.set(rel, e + max(0, new_size - old_size))
+    t.set(rel, e + max(0, new_size - old_size) + SLACK.get(rel, 0))
     print(f"RESTBL {rel}: {e} -> {t.get(rel)}")
 
 
