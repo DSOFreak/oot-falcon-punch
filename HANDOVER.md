@@ -89,6 +89,9 @@ Two things live in this repository now:
 | Punch anims | the ground punch (66 frames, hit at 42: a long wind-up) and the jump slam's phases, from the Melee animation | `tools/make_phases.py`, `tools/make_recovery.py` |
 | Damage, fire | data: the punch's AtCollision events use the burning Deku Stick's attack types (103, 104), whose entries in adult Link's attack table become the hammer's with `Fire` and a multiplier of 3000 | `tools/build_mod.py player_attacks`, `tools/build_asb.py ATTACK` |
 | Shout | "Falcon..." and "PUNCH!" from the player's Melee disc (`audio/us/captain.ssm`, sounds 345 and 354), played by the mod's code at the attack's phases | `tools/melee_ssm.py`, `falcon_punch.c` |
+| Flames | the effect link file (XLNK) gets an action per punch animation in the player's `Skl[Lower]` slot, with triggers on the "Link is burning" flame (`Ply_Fire_Burn_M_00`): on the fist (a trigger parameter set `Bone: Weapon_R`) through the wind-up, on the arm from the thrust | `tools/build_elink.py`, `tools/xlnk.py` |
+| No hammer | the hammer stays (the attack's shape is the weapon actor's) but is not drawn: the "visible" request of the equipment user's tool slot (slot 1), kept at 0 while the punch is equipped | `falcon_punch.c`: `tool_keep` |
+| Stays equipped | at a room's start the game reads the punch as "none equipped" and would equip the pouch's first item; its pick (`f_80a867a0`) is answered with the punch | `falcon_punch.c`: `fp_first_item` |
 
 Build and test:
 
@@ -123,20 +126,36 @@ Hard-won rules:
 - Never `pkill -f` with a pattern that is in the calling shell's own command line.
 
 Seen in game (2026-11-23, test copy, headless): with the punch equipped, ZR draws and ZR hits; Link turns, winds
-up for about a second and thrusts (the ground punch), the hit's dust burst follows, he recovers; the game stays up.
+up for about a second with a burning fist and thrusts (the ground punch), flames on the arm, the hit's dust burst,
+he recovers; no hammer in his hand at any time; the punch stays equipped through a door; the game stays up. Heard (the game's audio written to a file,
+`HOS_AUDIO_DUMP`, and matched against the two clips): "Falcon..." at the start, "PUNCH!" 1.25 s later.
+
+More hard-won rules:
+- **XLNK** (`tools/xlnk.py`): a user's trigger table can take new actions and triggers in place (inserted; the
+  header's positions and the users' offsets behind the insert move). A trigger's asset call position counts from
+  the user's asset call table (0x30 an entry). A trigger parameter set (`Bone`, `Scale`, ...) goes to the end of the
+  trigger overwrite table; a text value is `1 << 24 | name offset`. The flame of a looping emitter ends with the
+  animation (trigger flag 0, as the hammer's blur).
+- **Equipment slots**: `[[actor + 0x270] + 0x200]` is the equipment user component (the actor is `[Link + 0x18]`);
+  slots at +0x20 (0x18 each), their state at +0x4b0 (0xa8 each): +0xa4 the "visible" request, +0xa0 flag 4.
+  Slot 0 is the sword, 1 the tool in hand, 4 the shield. The game's own setter is `f_82e1e260`.
+- **GameData enums** are stored as the name's hash (murmur3): search memory for `mmh3("Amiibo")`, not 51.
+  `f_80bb9980` applies queued writes (a watchpoint only finds it); `f_81231c00` equips an item.
+- An attack's last command (`CutHammerAfter`) can come before the hit: it is not the attack's end.
 
 Open:
-1. The hammer's model is still in Link's fist during the punch (scaling the `Weapon_L/R` bones in the punch's
-   animations does not hide it): the weapon actor's model needs hiding in code or data.
-2. Flames on the fist itself. The hit already has the `Fire` element in data (the game's own fire reaction on what
-   is hit; not yet seen on an enemy). Fist flames are an effect call keyed by the animation's name in
-   `ELink2/elink2.Product.110.belnk` (XLNK): it needs an entry for the punch's animations that names a fire emitter
-   (e.g. `Ply_Magic_DinFire_*`), so an XLNK editor.
-3. Not verified: the damage on an enemy (the test save has none nearby), the shout by ear (the log shows both
-   sounds load; the code plays them at `CutS1` and 1.25 s later), the jump slam's phases with the real animations.
-4. The icon in the wheel and the HUD is still the amiibo logo (drawn specially for this item).
-5. A way to obtain the item in a real save, more languages, a drawn icon.
-6. `fp_debug` in `falcon_punch.c` is test scaffolding (read by `memscan.py sym`): take it out before a release.
+1. Not verified on an enemy: the damage and the fire reaction of what is hit (the test save has no enemy in
+   reach: Fire Temple, the lava room). The data is in place (`build_mod.player_attacks`).
+2. The jump slam's commands (`CutJumpSt`, `CutJumpEd`, `CutJumpLand`) were not reached in the tests: a punch out
+   of a run, with lock-on, and right after a jump all came out as the ground punch (`CutS1`, shouts 1.25 s apart).
+   Their punch branches are built but never seen with the punch's animations.
+3. The icon in the wheel and the HUD is still the amiibo logo: the UI draws it for the pouch entry whose name
+   is the literal "amiibo" (`f_833c7b90` compares `[entry + 0x88]` with it), not from `UI/Tex/Icon`.
+   The same name test is in the room-start routine `f_8112d570`, which is what un-equips the item at a door.
+4. Standing with the punch drawn, Link holds his hands as around the hammer's shaft (the hammer's hold
+   animations): an own stance would be new animations for the `[51]` branches of the hold states.
+5. More languages for the name; a drawn icon. The item itself needs nothing: the amiibo item it takes over is
+   in every save's wheel.
 
 ## Conventions
 

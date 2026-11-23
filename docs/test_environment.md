@@ -60,3 +60,16 @@ Nothing here touches `/Games/TF-OOT/Hookshot` or the player's real saves.
 - Finding what the animation system reads: equip, draw, `scan 51`; put away, `filter 0xffffffff`; draw, `filter 51`.
   Two addresses stay: Link's field (Link +0x7d8; Link's first word is `0x84b6dfc0`) and the blackboard's UsingItem.
   Link's current animation command is the text at Link +0x244.
+
+## Added 2026-11-23 (second round)
+
+- `tools/testenv/mem.sh CMD...`: one command to the running `memscan.py`, its answer printed (`mem.sh scan 51`,
+  `mem.sh read 1052362028 16`, `mem.sh write ADDR VALUE`).
+- `memscan.py` starts the game muted with its audio written to `$FP_ENV/audio.wav` (`HOS_AUDIO_MUTE`,
+  `HOS_AUDIO_DUMP`: 16-bit stereo at 48 kHz after a 44-byte header that is only filled in at exit). A clip is found
+  in it by cross-correlation (the shout: both clips at 0.95+).
+- `pad.py`: `tilt X Y` holds the left stick until the next `tilt` (an attack out of a run).
+- Data watchpoints: write up to four guest addresses (hex) to `$FP_ENV/ctrl/watch`; 8 s later `watch.out` has the
+  host places that touched them (`triforce+offset`: look the offset up in `nm -n bin/triforce` for the `f_<addr>`).
+- The test save is in the Fire Temple: the corridor before the lava room. No enemy is in reach; walking on in the
+  lava room costs hearts.

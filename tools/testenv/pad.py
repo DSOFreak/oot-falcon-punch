@@ -4,7 +4,8 @@ keyboard bindings. It exists only while a sequence runs (made, used, removed), s
     uv run --with evdev python tools/testenv/pad.py "ZR 150; wait 1500; X 150; wait 2000"
 
 Steps: NAME [ms] presses a button (default 120 ms), NAME+NAME [ms] presses them together, "hold NAME" / "release
-NAME", "wait ms", "stick X Y ms" (left stick, -1..1), "rstick X Y ms" (right stick: the camera). Names are the Switch buttons (Triforce maps the pad by
+NAME", "wait ms", "stick X Y ms" (left stick, -1..1), "rstick X Y ms" (right stick: the camera),
+"tilt X Y" (the left stick held there until the next tilt). Names are the Switch buttons (Triforce maps the pad by
 position: A east, B south, X north, Y west): A B X Y L R ZL ZR PLUS MINUS UP DOWN LEFT RIGHT LS RS.
 Note: any SDL program running at the time sees the pad (only the test game should be running).
 """
@@ -48,6 +49,10 @@ def run(ui, script):
             time.sleep(int(w[1]) / 1000)
         elif w[0] in ("hold", "release"):
             set_(ui, w[1], w[0] == "hold")
+        elif w[0] == "tilt":   # (the left stick held there until another tilt: "tilt 0 1; ZR; tilt 0 0")
+            ui.write(e.EV_ABS, e.ABS_X, int(float(w[1]) * 32767))
+            ui.write(e.EV_ABS, e.ABS_Y, int(-float(w[2]) * 32767))
+            ui.syn()
         elif w[0] in ("stick", "rstick"):   # (rstick: the camera)
             ax, ay = (e.ABS_X, e.ABS_Y) if w[0] == "stick" else (e.ABS_RX, e.ABS_RY)
             ui.write(e.EV_ABS, ax, int(float(w[1]) * 32767))

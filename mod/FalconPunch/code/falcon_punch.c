@@ -12,6 +12,7 @@
 
    Game 1.1.1's addresses (main at 0x80020000), found with tools/a64.py and the lifted C:
      f_8019b6e0  the equipped item, read from GameData (PlayerStatus.AssignableItem)
+     f_80a867a0  picks the item to equip when none is (the pouch's first), f_81231c00 equips one
      f_83035be0  the item component's setter: it ends in a virtual call (blackboard, UsingItem's index, the item)
      f_837d9790  that call's target for the player: the blackboard's set-int (x0 blackboard, w1 index, w2 value)
      f_80953270  asks the animation system for a command (x0 its controller, w1 the slot, x2 -> the name's text)
@@ -52,6 +53,7 @@ static volatile uint32_t blackboard_index;
 static volatile int tool_hidden;         /* the tool in his hand was asked not to be drawn */
 
 void f_837d9790(Ctx *c);                 /* the game's: the blackboard's set-int */
+void f_8019b6e0(Ctx *c);                 /* the game's: the equipped item (x0 the item component, x1 the slot, w2 0) */
 static void shout_tick(void);
 
 static uint64_t to_as(uint64_t item) {
@@ -121,6 +123,17 @@ void fp_item_get_frame(Ctx *c) {
     if (punch) mod_sound_load(SOUND_FALCON), mod_sound_load(SOUND_PUNCH);   /* (read ahead of the first punch) */
     if (blackboard && using_item == (punch ? HAMMER : FP_ITEM))
         mod_call(c, f_837d9790, blackboard, blackboard_index, punch ? FP_ITEM : HAMMER, 0);
+}
+
+/* before f_80a867a0, the game's pick of an item when none is equipped (x0 the item component, w1 the slot). At a
+   room's start the game asks for the equipped item in a second way (f_8019b6e0 with w2 1), which says "none" for
+   the punch, and would equip the pouch's first item (seen 2026-11-23: Deku Nuts after every door). Where the plain
+   question still says the punch, the punch is the pick: the game then equips it again itself */
+int fp_first_item(Ctx *c) {
+    const uint64_t slot = c->x[1] & 1;
+    if ((uint32_t)mod_call(c, f_8019b6e0, c->x[0], slot, 0, 0) != FP_ITEM) return 0;
+    c->x[0] = FP_ITEM;
+    return 1;
 }
 
 /* loads of the current item (player +0x7d8) that are written to UsingItem */

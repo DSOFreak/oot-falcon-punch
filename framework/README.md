@@ -6,7 +6,7 @@ has (`exefs/*.ips`, `exefs/*.pchtxt`), and the first that can *add* behaviour: a
 but a code cave is refused, so there is nowhere to put new code. This is the way Triforce's own additions are made
 (the sprint button: `nx2/oot_patches.py` and `host/oot_sprint.c`), opened to mods.
 
-The Falcon Punch item in this repository (`mod/FalconPunch`) is built on it: 6 hooks and one C file.
+The Falcon Punch item in this repository (`mod/FalconPunch`) is built on it: 8 hooks and one C file.
 
 ## What a mod looks like
 

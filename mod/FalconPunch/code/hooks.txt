@@ -19,3 +19,7 @@ before 0x837d9790 fp_blackboard_set
 
 # the attack's phases (the animation commands the player's states ask for): the shout
 before 0x80953270 fp_as_command
+
+# the game's pick of an item to equip when it finds none equipped (x0 the player's item component, w1 the slot):
+# at a room's start it reads the punch as "none" and would equip the first item of the pouch; it keeps the punch
+before 0x80a867a0 fp_first_item
