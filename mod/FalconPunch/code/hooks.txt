@@ -1,0 +1,17 @@
+# Falcon Punch: the item (the stored AssignableItem value 51, the game's unused amiibo slot) is the Megaton Hammer to
+# the game's logic and its own item to the animation system. falcon_punch.c has what each hook does.
+game E0F3CCFAF50065AE
+
+# the equipped item as the game's logic reads it (not the menus, which keep 51 and show the punch): 51 -> 7
+after-call 0x8019b6e0 fp_item_get in 0x802ebd20 0x80609d00 0x80a8e0d0 0x80a8ef20 0x80a913b0 0x80a93060 0x80a95ef0 0x80a96770 0x80bcd7d0 0x80c225d0 0x8112d570 0x81153f80 0x81231c00 0x828e2ca0 0x829364c0 0x82a3d940
+# (the player's item update, every frame: the one that also says whether the punch is the equipped item)
+after-call 0x8019b6e0 fp_item_get_frame in 0x830350a0
+
+# the item the animation system is told (its blackboard's UsingItem): 7 -> 51 while the punch is the equipped item
+load32 0x7d8 fp_as_item in 0x82e57c30 0x8305faa0 0x826d02e0 0x826d05c0
+before-icall 0x83035be0 fp_as_set
+before 0x837d9790 fp_blackboard_set
+
+# the attack's phases (the animation commands the player's states ask for): the shout, the punch's power
+before 0x80953270 fp_as_command
+after 0x82bc8960 fp_attack_power

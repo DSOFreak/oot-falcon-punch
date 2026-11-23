@@ -67,5 +67,6 @@ if __name__ == "__main__":
     outdir.mkdir(parents=True, exist_ok=True)
     for w in wanted:
         off, size = files[w]
+        (outdir / w).parent.mkdir(parents=True, exist_ok=True)
         (outdir / w).write_bytes(disc.read(off, size))
         print("wrote", w, size)

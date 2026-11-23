@@ -29,9 +29,12 @@ P02 = "Model/Player_Adult_02_H_Animation.anim.bfres"
 P04 = "Model/Player_Adult_04_Animation.anim.bfres"
 ASB = "AS/Player_Adult.root.asb"
 ASNODE = "AnimationEvent/AsNode/Player_Adult.root.baev"
-V1_ANIMS = {
-    "Hammer_Attack_Vertical_Advance": "falcon_punch_link_ground.json",
-    "Hammer_Attack_Vertical_AdvanceZero": "falcon_punch_link_ground_advancezero.json",
+V1_ANIMS = {   # (tools/make_phases.py: the punch as the phases of the hammer's jump slam; tools/make_recovery.py)
+    "FalconPunch_Pre": "falcon_punch_phase_pre.json",
+    "FalconPunch_St": "falcon_punch_phase_st.json",
+    "FalconPunch_Jump": "falcon_punch_phase_jump.json",
+    "FalconPunch_Land": "falcon_punch_phase_land.json",
+    "FalconPunch_After": "falcon_punch_link_after.json",
 }
 ANIMS = {   # (time-warped to the hammer attack's AS event timing: tools/retarget_falcon_link.py HAMMER_KNOTS)
     "FalconPunch": "falcon_punch_link_ground_hammertimed.json",
@@ -106,6 +109,27 @@ def item_pack(romfs, out, t):
     grow(t, CARRIER_PACK, len(old), len(new))
 
 
+SOUNDS = {   # RomFS path -> the player's own Melee sound (tools/melee_ssm.py: out/melee/voice)
+    "Sound/Mod/FalconPunch/Falcon.wav": "captain_0345.wav",
+    "Sound/Mod/FalconPunch/Punch.wav": "captain_0354.wav",
+}
+
+
+def item_code_and_sounds(mod):
+    """The mod's code folder (mod/FalconPunch/code: its hooks and C, built in by a Triforce with code hooks,
+    framework/) and the shout, from the player's Melee disc. Without the disc's sounds the punch is silent"""
+    import shutil
+    shutil.rmtree(mod / "code", ignore_errors=True)
+    shutil.copytree(ROOT / "mod/FalconPunch/code", mod / "code")
+    for rel, src in SOUNDS.items():
+        p = ROOT / "out/melee/voice" / src
+        if not p.exists():
+            print(f"no {p}: run tools/melee_ssm.py (the punch stays silent)")
+            continue
+        (mod / "romfs" / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(p, mod / "romfs" / rel)
+
+
 ICON_SRC = "Armor_Adult_Gauntlet_Gold"   # stand-in icon (a fist) until a drawn one exists
 
 
@@ -149,7 +173,7 @@ def add_anims(p04, anims, work):
     return cur.read_bytes()
 
 
-SLACK = {P04: 4 << 20, ASB: 4 << 20}   # (the entry sizes the resource's heap: the game puts more than the file in it,
+SLACK = {P04: 4 << 20, ASB: 4 << 20, ASNODE: 1 << 20}   # (the entry sizes the resource's heap: the game puts more than the file in it,
                                        #  e.g. _04's model buffer, which did not fit with the growth alone)
 
 
@@ -208,6 +232,8 @@ def main():
             item_icon(romfs, out, t, name=f"{CARRIER}_PouchIcon")   # (the UI also builds "%s_PouchIcon")
     (out / (P04 + ".zs")).write_bytes(zs.compress(new04, "x.bfres.zs"))
     grow(t, P04, len(p04), len(new04))
+    if not a.v1 and not a.replace_hammer:
+        item_code_and_sounds(Path(a.out))
     (out / restbl.REL).parent.mkdir(parents=True, exist_ok=True)
     restbl.save(t, out / restbl.REL)
     print("mod written to", out.parent)
