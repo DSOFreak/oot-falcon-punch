@@ -85,6 +85,27 @@ def item_data(romfs, out, t):
         grow(t, rel, len(old), len(new))
 
 
+CARRIER_PACK = f"Pack/Actor/{CARRIER}.pack"
+CARRIER_CONTENT = f"Component/PouchContentParam/{CARRIER}.game__component__PouchContentParam.bgyml"
+
+
+def item_pack(romfs, out, t):
+    """The carrier actor's own PouchContentParam says SpecialDeal: Amiibo (the RSDB row is not the only source): the
+    wheel and the HUD then draw the amiibo logo and the amiibo hint. The key goes, as in Pouch_Hammer's."""
+    import byml7
+    import oead
+    old = zs.load(str(romfs / (CARRIER_PACK + ".zs")))
+    sarc = oead.Sarc(old)
+    w = oead.SarcWriter.from_sarc(sarc)
+    p = byml7.load(bytes(sarc.get_file(CARRIER_CONTENT).data))
+    del p["SpecialDeal"]
+    w.files[CARRIER_CONTENT] = byml7.dump(p)
+    new = bytes(w.write()[1])
+    (out / CARRIER_PACK).parent.mkdir(parents=True, exist_ok=True)
+    (out / (CARRIER_PACK + ".zs")).write_bytes(zs.compress(new, "x.pack.zs"))
+    grow(t, CARRIER_PACK, len(old), len(new))
+
+
 ICON_SRC = "Armor_Adult_Gauntlet_Gold"   # stand-in icon (a fist) until a drawn one exists
 
 
@@ -176,7 +197,9 @@ def main():
             grow(t, ASNODE, baev_src.stat().st_size, len(baev_new))
         if not a.replace_hammer:
             item_data(romfs, out, t)
+            item_pack(romfs, out, t)
             item_icon(romfs, out, t)
+            item_icon(romfs, out, t, name=f"{CARRIER}_PouchIcon")   # (the UI also builds "%s_PouchIcon")
     (out / (P04 + ".zs")).write_bytes(zs.compress(new04, "x.bfres.zs"))
     grow(t, P04, len(p04), len(new04))
     (out / restbl.REL).parent.mkdir(parents=True, exist_ok=True)
