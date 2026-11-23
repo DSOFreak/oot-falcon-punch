@@ -798,8 +798,9 @@ def build_bone_anim(name, frames, s=None, r=None, t=None, quat=None, seg_scale_c
         flags |= XF_ROTATE_ZERO
     if not comps & {"tx", "ty", "tz"} and all(abs(x) < 1e-9 for x in base_t):
         flags |= XF_TRANSLATE_ZERO
-    # order curves like the game: scale, rotate, translate
-    order = {"sx": 0, "sy": 1, "sz": 2, "rx": 3, "ry": 4, "rz": 5, "rq": 3, "tx": 6, "ty": 7, "tz": 8}
+    # order curves like the game: scale, rotate, translate; a quaternion curve first of all (the game's bone sampler,
+    # f_814f0620, takes only curve 0 as a quaternion: one further down reaches the scalar sampler and aborts)
+    order = {"rq": -1, "sx": 0, "sy": 1, "sz": 2, "rx": 3, "ry": 4, "rz": 5, "tx": 6, "ty": 7, "tz": 8}
     curves.sort(key=lambda c: order[c.comp])
     return BoneAnim(name, flags, 3, 6, 7, 0, base_s, base_r, base_t, curves)
 
