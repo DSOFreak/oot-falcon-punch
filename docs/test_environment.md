@@ -9,6 +9,11 @@ Nothing here touches `/Games/TF-OOT/Hookshot` or the player's real saves.
 - **Launch:** `tools/testenv/launch.sh`. It sets `HOOKSHOT_NO_UPDATE_CHECK=1`; otherwise a zenity "update to v0.6.0?"
   dialog blocks the start, with *Update now* preselected, so never confirm it. The log goes to **stdout**
   (`$GAME_OUT`), not to `triforce_log.txt`. That file in FPTest is a stale copy of the original.
+- **Own environment (since 2026-11-23):** tests never use the user's screen, keyboard or caches.
+  `tools/testenv/display.sh start` runs a **headless sway** (own socket `wayland-fptest`, `WLR_LIBINPUT_NO_DEVICES=1`,
+  1920x1080, game fullscreen and focused). `env.sh` gives the game its own XDG cache/config and GPU driver shader
+  caches under `/Games/TF-OOT/fptest-env` (the user's game shares `~/.cache/nvidia` otherwise). `wtype` and `grim`
+  act on that display only. The first run compiles all shaders once (about 42.5k).
 - **Drive:** `toplay.sh` (title → Continue → newest slot), `key.sh KEY [ms]` (wtype), `shot.sh OUT [scale]` (grim on
   the window).
 - **Keys (VK codes in triforce_options.ini):**

@@ -48,10 +48,16 @@ def main():
     ctrl = sys.argv[1]
     os.makedirs(ctrl, exist_ok=True)
     cmdf, logf = os.path.join(ctrl, "cmd"), os.path.join(ctrl, "log")
+    fp_env = os.environ.get("FP_ENV", "/Games/TF-OOT/fptest-env")   # (same environment as env.sh: run under display.sh)
     env = dict(os.environ, HOOKSHOT_NO_UPDATE_CHECK="1", XDG_DATA_HOME="/Games/TF-OOT/fptest-data",
+               XDG_CACHE_HOME=f"{fp_env}/cache", XDG_CONFIG_HOME=f"{fp_env}/config",
+               __GL_SHADER_DISK_CACHE_PATH=f"{fp_env}/cache/nvidia", MESA_SHADER_CACHE_DIR=f"{fp_env}/cache/mesa",
+               WAYLAND_DISPLAY="wayland-fptest", SDL_VIDEODRIVER="wayland",
                SDL_GAMECONTROLLER_IGNORE_DEVICES="0x045e/0x028e",   # (a plugged-in pad overrides keyboard RB)
                HOS_WATCH=os.path.join(ctrl, "watch"))   # (write up to 4 guest addresses there: data breakpoints, see host/posix/prof.c)
-    out = open(os.environ.get("GAME_OUT", "/tmp/fptest_game.out"), "wb")
+    env.pop("DISPLAY", None)
+    env.pop("HYPRLAND_INSTANCE_SIGNATURE", None)
+    out = open(os.environ.get("GAME_OUT", f"{fp_env}/game.out"), "wb")
     p = subprocess.Popen(["./bin/triforce"], cwd=GAME, env=env, stdout=out, stderr=subprocess.STDOUT)
     memf = gfd = None
     state_dt = ["i4"]
