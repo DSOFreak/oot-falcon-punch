@@ -1,6 +1,6 @@
 # Handover: Falcon Punch item for Link (Triforce OoT)
 
-Snapshot of 2026-11-22. Repository: https://github.com/DSOFreak/oot-falcon-punch (public, branch `main`).
+Snapshot of 2026-11-23. Repository: https://github.com/DSOFreak/oot-falcon-punch (public, branch `main`).
 Working directory: `/Games/TF-OOT/falconpunch`.
 
 ## What the user wants
@@ -69,40 +69,74 @@ Working directory: `/Games/TF-OOT/falconpunch`.
 | Retarget Falcon → Link | **Done** (30 fps, 50 frames; `FalconPunch`, `_AdvanceZero`, `_Air` inserted into a copy of `_04`; **not yet loaded in game**) | `tools/retarget_falcon_link.py`; docs in `out/retarget/README.md` |
 | Enum reverse engineering | Tables and conversion sites mapped; consumers not yet | `tools/a64.py`, `docs/assignable_item_enum.md` |
 
-## Current state (2026-11-22, Triforce v0.7.0)
+## Current state (2026-11-23, Triforce v0.7.0)
 
-The user chose the **rebuild route** (a real new item, built with our own builder copy). Architecture:
+Two things live in this repository now:
+
+- **`framework/`**: code hooks for Triforce mods, a proposal for upstream with a working implementation against
+  v0.7.0 (`framework/README.md`). A mod carries `code/hooks.txt` and its own C; the build applies the hooks to the
+  lifted C and compiles the C in. `framework/install.py <tree>` puts it into a Triforce source tree;
+  `framework/test_code_hooks.py` tests it without a game.
+- **`mod/FalconPunch/code/`**: the Falcon Punch on that framework (`hooks.txt`, `falcon_punch.c`). The mod's RomFS
+  is built from the player's game files and Melee disc by `tools/build_mod.py` (never committed).
 
 | Part | How | Where |
 |---|---|---|
-| Item identity | takes over `Pouch_Amiibo` (stored AssignableItem **51**; has pouch row, pack, GameData) | `tools/build_mod.py` item mode |
-| Name / caption | `ActorMsg/PouchContent.msbt` in `Mals/USen`, `EUen` | `tools/msbt.py` |
-| Icon | `UI/Tex/Icon/Pouch_Amiibo.bntx` = Golden Gauntlets icon, renamed (stand-in) | `build_mod.item_icon` |
-| Game logic | C patch: `fp_item()` maps 51 -> 7 at every load of `player+0x7d8` (current item) in 88 functions | `patches/fp_patches.py`, `tools/find_item_sites.py` |
-| Animations | AS: `[51]` next to all 109 `UsingItem [7]` branches; the 3 vertical-attack leaves and the 9 follow-through leaves wrapped in `UsingItem` selectors (51 -> punch / recovery) | `tools/build_asb.py`, `tools/asb_edit.py` |
-| Punch anims | `FalconPunch*` in `_04`, time-warped to the hammer's AS event timing (hit f17, 40 frames); `FalconPunch_After` recovery (46 f) | `tools/retarget_falcon_link.py` (`warp`), `tools/make_recovery.py` |
+| Item identity | takes over `Pouch_Amiibo` (stored AssignableItem **51**; pouch row, pack, name, icon) | `tools/build_mod.py` |
+| Game logic | the item getter `f_8019b6e0` gives its game-logic callers the hammer (7); the menus keep 51 | `hooks.txt`: `after-call` |
+| Animation value | Link's field "item in hand" (Link +0x7d8) is kept at 51 while the punch is equipped, and every game load of it (88 functions) is given 7; the blackboard's UsingItem gets 51 too | `falcon_punch.c`: `hand_keep`, `fp_hand_load`, `fp_blackboard_set` |
+| Animations | AS: `[51]` beside all 109 `UsingItem [7]` branches (hold, walk, put away: the hammer's nodes); the attack commands get the punch's own nodes with copied, edited Event nodes | `tools/build_asb.py`, `tools/baev.py` |
+| Punch anims | the ground punch (66 frames, hit at 42: a long wind-up) and the jump slam's phases, from the Melee animation | `tools/make_phases.py`, `tools/make_recovery.py` |
+| Damage, fire | data: the punch's AtCollision events use the burning Deku Stick's attack types (103, 104), whose entries in adult Link's attack table become the hammer's with `Fire` and a multiplier of 3000 | `tools/build_mod.py player_attacks`, `tools/build_asb.py ATTACK` |
+| Shout | "Falcon..." and "PUNCH!" from the player's Melee disc (`audio/us/captain.ssm`, sounds 345 and 354), played by the mod's code at the attack's phases | `tools/melee_ssm.py`, `falcon_punch.c` |
 
-Builder: `tools/fp_builder.sh` makes `/Games/TF-OOT/fpbuilder07` (extracted v0.7.0 AppImage + our hook in
-`nx2/chunks.py`). Rebuild the test copy: `/Games/TF-OOT/fpbuilder07/AppRun --cli --update /Games/TF-OOT/FPTest
---no-prepare-shaders` (shares `~/.cache/triforce-build`; a few changed files take about 4-15 min).
+Build and test:
 
-Hard-won rules (ASB 0x41b):
-- Appending is safe: bodies, strings, a relocated node table, new nodes.
-- A node that owns **Event nodes** (event slot) cannot be copied: sharing its Event nodes or copying them (new GUIDs,
-  header 0x1c raised) crashes at load. Only copy event-free leaves; insert selectors above/below instead.
-- Event nodes are placeholders (index 0xffff); their real events are in `AnimationEvent/AsNode/*.root.baev`, keyed by
-  FNV-1a of the node GUID text (`tools/baev.py`). The hammer attack's events (AtCollision 14-24, AtSound 10,
-  EmitEffect 20, cancels 40) live on Event node #16179 under blender #16176.
-- The follow-through state ends by AnmSeqCancel@44 on its blender (#17398), so its leaves are wrapped, not the blender.
+```sh
+tools/fp_builder.sh                                   # builder copy with the framework: /Games/TF-OOT/fpbuilder07
+uv run python tools/gc_extract.py <GALE01.ciso> melee audio/us/captain.ssm
+uv run python tools/melee_ssm.py melee/audio/us/captain.ssm out/melee/voice
+uv run python tools/retarget_falcon_link.py && uv run python tools/make_phases.py
+uv run python tools/make_recovery.py --punch out/retarget/falcon_punch_phase_land.json
+uv run python tools/build_mod.py --romfs <game>/romfs   # out/mod/FalconPunch -> <game>/mods/FalconPunch
+/Games/TF-OOT/fpbuilder07/AppRun --cli --update <game> --no-prepare-shaders
+```
+
+Test environment: `docs/test_environment.md` (headless sway, virtual gamepad `tools/testenv/pad.py`, memory tool
+`tools/testenv/memscan.py` with `scan`, `filter`, `watch`, `write`, `sym`).
+
+Hard-won rules:
+- **RESTBL**: the entry sizes the resource's heap. Growth alone is not enough for `_04` and the AS: 4 MB slack
+  (`build_mod.SLACK`). Too little shows as a black screen after loading, or a null call.
+- **ASB**: appending is safe (bodies, strings, a relocated node table, new nodes, copies of Event nodes). The game
+  does **not** follow a changed root index in the command table: a new root has to take the old root's node index
+  (`asb_edit.swap_nodes`). A selector inside a OneDimensionalBlender or a Sequential stalls the state.
+- **BAEV**: offsets become pointers in place at load, so a structure that holds a pointer must be reachable once
+  only; an edited copy of an event node is copied whole (`baev.edited_node`). A parameter is (u64 type, u64 value).
+  AtCollision's second parameter is the attack type (index of the game's enum; the player's
+  `GameBalance/AttackParam` table has damage multiplier, elements, attributes by its hash).
+- **The hammer's attacks**: the swing on the ground is the command `CutS1` (AttackComboType picks left, right,
+  vertical); out of a jump or a run it is the jump slam, `CutJumpSt` / `CutJumpEd` / `CutJumpLand`; then
+  `CutHammerAfter`. Link's current command name is the text at `[Link +0x238]`.
+- **The item value**: the equipped item's getter is called for more than the equipped slot; only the player's item
+  update (`f_830350a0`) says what is equipped. The animation system saw the hammer until Link's own field held 51.
+- Never `pkill -f` with a pattern that is in the calling shell's own command line.
+
+Seen in game (2026-11-23, test copy, headless): with the punch equipped, ZR draws and ZR hits; Link turns, winds
+up for about a second and thrusts (the ground punch), the hit's dust burst follows, he recovers; the game stays up.
 
 Open:
-1. **In-game test of the C patch** (FPTest built with it): equip "Falcon Punch" (amiibo slot, far right of the wheel),
-   press the item button; expect hammer behaviour with the punch animation. If the AS sees 7 instead of 51, find the
-   `UsingItem` blackboard write and exempt it.
-2. Weapon model: the hammer may show in Link's hand for 51; make it invisible (weapon actor/model for the item).
-3. A way to obtain it for real saves (save editor `tools/progress_sav.py`, or a chest/shop), more languages, a drawn
-   icon, sounds/effect (falcon voice, fire).
-4. Saves: v0.7 keeps them in `$XDG_DATA_HOME/triforce/user/...` (test copy: `/Games/TF-OOT/fptest-data/triforce`).
+1. The hammer's model is still in Link's fist during the punch (scaling the `Weapon_L/R` bones in the punch's
+   animations does not hide it): the weapon actor's model needs hiding in code or data.
+2. Flames on the fist itself. The hit already has the `Fire` element in data (the game's own fire reaction on what
+   is hit; not yet seen on an enemy). Fist flames are an effect call keyed by the animation's name in
+   `ELink2/elink2.Product.110.belnk` (XLNK): it needs an entry for the punch's animations that names a fire emitter
+   (e.g. `Ply_Magic_DinFire_*`), so an XLNK editor.
+3. Not verified: the damage on an enemy (the test save has none nearby), the shout by ear (the log shows both
+   sounds load; the code plays them at `CutS1` and 1.25 s later), the jump slam's phases with the real animations.
+4. The icon in the wheel and the HUD is still the amiibo logo (drawn specially for this item).
+5. A way to obtain the item in a real save, more languages, a drawn icon.
+6. `fp_debug` in `falcon_punch.c` is test scaffolding (read by `memscan.py sym`): take it out before a release.
 
 ## Conventions
 

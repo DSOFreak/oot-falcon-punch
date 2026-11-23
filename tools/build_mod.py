@@ -29,7 +29,11 @@ P02 = "Model/Player_Adult_02_H_Animation.anim.bfres"
 P04 = "Model/Player_Adult_04_Animation.anim.bfres"
 ASB = "AS/Player_Adult.root.asb"
 ASNODE = "AnimationEvent/AsNode/Player_Adult.root.baev"
-V1_ANIMS = {   # (tools/make_phases.py: the punch as the phases of the hammer's jump slam; tools/make_recovery.py)
+V1_ANIMS = {
+    "Hammer_Attack_Vertical_Advance": "falcon_punch_link_ground.json",
+    "Hammer_Attack_Vertical_AdvanceZero": "falcon_punch_link_ground_advancezero.json",
+}
+ANIMS = {   # (tools/make_phases.py: the ground punch and the jump slam's phases; tools/make_recovery.py)
     "FalconPunch_Ground": "falcon_punch_phase_ground.json",
     "FalconPunch_GroundZero": "falcon_punch_phase_groundzero.json",
     "FalconPunch_Pre": "falcon_punch_phase_pre.json",
@@ -37,12 +41,6 @@ V1_ANIMS = {   # (tools/make_phases.py: the punch as the phases of the hammer's 
     "FalconPunch_Jump": "falcon_punch_phase_jump.json",
     "FalconPunch_Land": "falcon_punch_phase_land.json",
     "FalconPunch_After": "falcon_punch_link_after.json",
-}
-ANIMS = {   # (time-warped to the hammer attack's AS event timing: tools/retarget_falcon_link.py HAMMER_KNOTS)
-    "FalconPunch": "falcon_punch_link_ground_hammertimed.json",
-    "FalconPunch_AdvanceZero": "falcon_punch_link_ground_advancezero_hammertimed.json",
-    "FalconPunch_Air": "falcon_punch_link_air_hammertimed.json",
-    "FalconPunch_After": "falcon_punch_link_after.json",   # (tools/make_recovery.py)
 }
 
 

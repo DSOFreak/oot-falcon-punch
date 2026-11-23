@@ -49,3 +49,14 @@ Nothing here touches `/Games/TF-OOT/Hookshot` or the player's real saves.
   right fist cocked) and the lunge, with correct facing and no broken bones. After about 20 frames the AS moves on
   to `Hammer_Attack_Vertical_After`.
 - **Conclusions:** the bfres writer, by-name binding across anim files, the RESTBL edit and the 30 fps timing work.
+
+## Tools added on 2026-11-23
+
+- `tools/testenv/pad.py`: also `rstick X Y ms` (the camera).
+- `tools/testenv/memscan.py` commands (written to `$FP_ENV/ctrl/cmd`, answers in `ctrl/log`): `scan VALUE`,
+  `filter VALUE` (narrow the candidates after changing the game's state), `read ADDR N`, `watch ADDR SECONDS` (a
+  32-bit value's changes, sampled as fast as it reads), `write ADDR VALUE` (a poke), `sym NAME [bytes]` (a host
+  variable of the game binary, e.g. the mod's `fp_debug`).
+- Finding what the animation system reads: equip, draw, `scan 51`; put away, `filter 0xffffffff`; draw, `filter 51`.
+  Two addresses stay: Link's field (Link +0x7d8; Link's first word is `0x84b6dfc0`) and the blackboard's UsingItem.
+  Link's current animation command is the text at Link +0x244.

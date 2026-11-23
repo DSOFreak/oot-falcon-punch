@@ -15,6 +15,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <windows.h>   /* (GetTickCount64; host/posix has its own on Linux) */
+
 #include "mod_api.h"
 #include "menu_sound.h"   /* (hos_menu_sound_decode_long: the game's BWAV files) */
 
