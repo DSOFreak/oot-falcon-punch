@@ -127,6 +127,27 @@ def main():
                     m.seek(base + off)
                     b = m.read(n)
                 log(f"{line[1]} @{base + off:x}: {b.hex(' ')} ({int.from_bytes(b[:4], 'little', signed=True)})")
+            elif line[0] == "watch":   # watch ADDR SECONDS: a 32-bit value sampled as fast as it reads, its changes
+                a, secs = int(line[1], 16), float(line[2])
+                seq, t_end = [], time.time() + secs
+                while time.time() < t_end:
+                    v = int.from_bytes(read(BASE + a, 4), "little", signed=True)
+                    if not seq or seq[-1][1] != v:
+                        seq.append((round(time.time() - t0, 2), v))
+                log(f"watch {a:x}:", " ".join(f"{t}s={v}" for t, v in seq[:80]))
+            elif line[0] == "write":   # write ADDR VALUE: a 32-bit value into the game's memory (an experiment's poke)
+                a, v = int(line[1], 16), int(line[2], 0)
+                for fd in os.listdir(f"/proc/{p.pid}/fd"):   # (the guest's memory is a memfd: its offset is the address)
+                    path = f"/proc/{p.pid}/fd/{fd}"
+                    try:
+                        if "hookshot-guest" in os.readlink(path):
+                            w = os.open(path, os.O_RDWR)
+                            os.pwrite(w, (v & 0xFFFFFFFF).to_bytes(4, "little"), a)
+                            os.close(w)
+                            break
+                    except OSError:
+                        continue
+                log(f"write {a:x} = {v}")
             elif line[0] == "read":
                 a, n = int(line[1], 16), int(line[2], 0)
                 b = read(BASE + a, n)

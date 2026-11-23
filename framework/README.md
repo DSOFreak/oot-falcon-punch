@@ -26,7 +26,7 @@ before 0x80953270 my_command          # int my_command(Ctx *c): first thing in t
 after 0x82bc8960 my_power             # void my_power(Ctx *c): when it has returned, its result in c->x[0]
 after-call 0x8019b6e0 my_item in 0x802ebd20 0x80609d00     # after each call of the first in the named callers
 before-icall 0x83035be0 my_set        # before each indirect (virtual) call or jump of the function
-load32 0x7d8 my_value in 0x82e57c30   # uint64_t my_value(Ctx *c, uint64_t v): each 32-bit load from reg + 0x7d8
+load32 0x7d8 my_value in 0x82e57c30   # uint64_t my_value(Ctx *c, uint64_t v, uint64_t address): each 32-bit load from reg + 0x7d8
 ```
 
 The C sees the game as the runtime does, through `host/mod_api.h`:
@@ -50,7 +50,7 @@ int my_command(Ctx *c) {                      /* before 0x80953270: x2 -> the an
 | `mod_ld8/32/64/f`, `mod_st8/32/64/f` | the game's memory at its own addresses, checked: outside the game's heap and image a read is 0 and a write nothing, where a stale pointer would fault |
 | `mod_cstr`, `mod_streq` | the game's text |
 | `mod_call` | a function of the game, called from a hook with up to four arguments; the registers are restored after it |
-| `mod_log` | a line in `triforce_log.txt` |
+| `mod_log`, `mod_time_ms` | a line in `triforce_log.txt`; a clock |
 | `mod_sound_load`, `mod_sound_play` | a `.wav` (or one of the game's `.bwav`) by its RomFS path, mixed over the game's sound where the options' sounds are: after the limiter, under the Master volume. 16 at a time |
 
 ## How it is built in

@@ -85,7 +85,7 @@ class Baev:
         return at
 
     def _copy_params(self, po, pc, psz):
-        """A copy of a parameter array (pointers to 16-byte parameters: u32 type, u64 value; a text value points
+        """A copy of a parameter array (pointers to 16-byte parameters: u64 type, u64 value; a text value points
         into the string pool, which stays shared) -> its offset"""
         if not pc:
             return po
@@ -94,8 +94,9 @@ class Baev:
         return self._append(struct.pack("<%dQ" % pc, *ptrs))
 
     def edited_node(self, idx, edits):
-        """A copy of event node idx with other times: edits {event name: {"trigger": [frame, ...], "hold":
-        [(start, end), ...]}} (as many as the event has). The copy is whole (its events, their trigger and hold
+        """A copy of event node idx with other times and values: edits {event name: {"trigger": [frame, ...],
+        "hold": [(start, end), ...]}} (as many as the event has), and "trigger_params" / "hold_params": {(entry,
+        parameter): value} for a parameter's value (a parameter is u64 type, u64 value). The copy is whole (its events, their trigger and hold
         arrays, their parameters): no structure with a pointer in it is reachable twice, as in the game's own file
         (the game turns the offsets into pointers in place when it loads the file; a shared array hung the load).
         Appended; returns the 24-byte node entry of the copy (for the node array)"""
@@ -112,12 +113,16 @@ class Baev:
             for key, at, width in (("trigger", 8, 1), ("hold", 0x18, 2)):
                 ao, ac, asz = struct.unpack_from("<QII", events, k * esz + at)
                 if not ac:
-                    assert key not in e, (name, key)
+                    assert key not in e and key + "_params" not in e, (name, key)
                     continue
                 arr = bytearray(self.d[ao:ao + ac * asz])
                 for j in range(ac):
                     po, pc, psz = struct.unpack_from("<QII", arr, j * asz)
                     struct.pack_into("<Q", arr, j * asz, self._copy_params(po, pc, psz))
+                for (j, i), value in e.get(key + "_params", {}).items():   # (entry j's parameter i: its value)
+                    po, pc, _ = struct.unpack_from("<QII", arr, j * asz)
+                    assert i < pc, (name, key, j, i)
+                    struct.pack_into("<Q", self.d, self.u64(po + 8 * i) + 8, value)
                 if key in e:
                     vals = [v if isinstance(v, (tuple, list)) else (v,) for v in e[key]]
                     assert len(vals) == ac and all(len(v) == width for v in vals), (name, key, ac)

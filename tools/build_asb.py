@@ -3,14 +3,22 @@
     uv run python tools/build_asb.py [--value 51] [--replace-hammer] [--src ...] [--out ...]
 
 1. Every IntSelector on bb:UsingItem with a branch for 7 (Hammer) gets the same branch for VALUE (the item's
-   stored AssignableItem value): the item equips, holds, moves and attacks like the hammer, through the hammer's own
-   nodes, so the attack keeps the hammer's AS events (AtCollision 14-24, sounds, cancels: Event node #16179).
-2. Overlays: each hammer attack state (commands CutJumpSt/Ed/Land, CutHammerAfter, and the ground and step
-   attacks' UsingItem selectors) keeps its own nodes for VALUE, with their Event nodes (hit, sounds, the events that
-   end the state). Its VALUE branch goes to a new BoneBlender (upper-body mask, from #3851): base = the hammer's
-   node (shared, not copied), overlay = a punch leaf. Learned in game (2026-11-23): copying a node that owns Event
-   nodes crashes; a selector inside a OneDimensionalBlender or a Sequential stalls the state (the hammer's too).
---replace-hammer: test mode, the overlays also on the hammer's own branch (7): no code change needed.
+   stored AssignableItem value): the item is held, carried and put away like the hammer, through the hammer's nodes.
+2. The attack. The hammer's hit is a jump slam, four commands: CutJumpSt (wind-up), CutJumpEd (leap), CutJumpLand
+   (hit), CutHammerAfter. Each gets a new root in its old root's place (the same node index: the game does not
+   follow a changed index), a UsingItem selector: VALUE -> a copy of the hammer's nodes with the
+   punch's animations (punch_anim) and copies of their Event nodes, everything else -> the command's own root. The AsNode
+   BAEV gives each copied Event node its original's events, or edited ones (EVENT_EDITS): the wind-up's length, the
+   punch's attack type.
+3. The swing on the ground (inside the command CutS1, and after a side step): the UsingItem selectors whose
+   hammer branch leads to the hammer's swings give VALUE a copy of them with the punch's animation, their events
+   later by the punch's wind-up (GROUND_SHIFT).
+--replace-hammer: test mode, the hammer's own value (7) takes the punch's branch too.
+
+Learned in game (2026-11-23): the animation system has the value once Link's own field (the item in his hand) and
+the blackboard's UsingItem both hold it (mod/FalconPunch/code/falcon_punch.c). An IntSelector inside a
+OneDimensionalBlender or a Sequential stalls the state. A BAEV structure that holds a pointer must not be reachable
+twice (tools/baev.py edited_node).
 """
 import argparse
 import os
@@ -22,20 +30,43 @@ from asb_edit import Editor, check  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COMMANDS = ("CutJumpSt", "CutJumpEd", "CutJumpLand", "CutHammerAfter")   # the hammer's attack: the jump slam
-ANIMS = (   # (hammer animation name prefix -> the punch's, tools/make_phases.py; first match)
-    ("Hammer_Attack_Jump_Pre", "FalconPunch_Pre"),
-    ("Hammer_Attack_Jump_St", "FalconPunch_St"),
-    ("Hammer_Attack_Jump", "FalconPunch_Jump"),
-    ("Hammer_Attack_Vertical_Jump_Land", "FalconPunch_Land"),
-    ("Hammer_Attack_Vertical_After", "FalconPunch_After"),
-)
+def punch_anim(name):
+    """A hammer animation's name -> the punch's (tools/make_phases.py), or None"""
+    if name.startswith(("Hammer_Attack_Left", "Hammer_Attack_Right", "Hammer_Attack_Vertical_Advance")):
+        return "FalconPunch_GroundZero" if name.endswith("AdvanceZero") else "FalconPunch_Ground"
+    for k, v in (("Hammer_Attack_Jump_Pre", "FalconPunch_Pre"), ("Hammer_Attack_Jump_St", "FalconPunch_St"),
+                 ("Hammer_Attack_Jump", "FalconPunch_Jump"), ("Hammer_Attack_Vertical_Jump_Land", "FalconPunch_Land"),
+                 ("Hammer_Attack_Vertical_After", "FalconPunch_After")):
+        if name.startswith(k):
+            return v
+    return None
 
+
+GROUND_SHIFT = 28   # the ground punch's wind-up over the hammer's swing, in frames (the hammer hits at 14, the punch
+                    # at 42: tools/make_phases.py GROUND_HIT)
 PRE_GO = 40   # the wind-up's length: the frame of FalconPunch_Pre at which the state goes on to the thrust
-EVENT_EDITS = {   # hammer Event node -> other times for its copy (tools/baev.py edited_node)
+# The punch's attack: the AtCollision events' second parameter is the attack type (an index of the game's enum; the
+# player's GameBalance/AttackParam table has its damage). The hammer's are 108 (the jump slam) and 117 (its shock
+# wave). The punch takes the burning Deku Stick's two, which adult Link never uses: 104 and 103, whose table entries
+# tools/build_mod.py turns into the punch's (fire, and a multiplier nothing survives).
+ATTACK = {"hold_params": {(0, 1): 104, (1, 1): 103}}
+D = float(GROUND_SHIFT)
+GROUND_HIT = {"hold": [(14.0 + D, 24.0 + D), (14.0 + D, 24.0 + D)], **ATTACK}
+EVENT_EDITS = {   # hammer Event node -> other times and values for its copy (tools/baev.py edited_node)
     # CutJumpSt's selector: NoChangeAS 0-9, CanChangeAS 17 (the wind-up ends there)
     16388: {"NoChangeAS": {"hold": [(0.0, float(PRE_GO - 8))]}, "CanChangeAS": {"trigger": [float(PRE_GO)]}},
+    16354: {"AtCollision": ATTACK},   # Hammer_Attack_Jump_St
+    16356: {"AtCollision": ATTACK},   # Hammer_Attack_Jump
+    16404: {"AtCollision": ATTACK},   # the landing
+    # the ground swings (CutS1): everything later by the wind-up
+    16179: {"AtSound": {"trigger": [10.0 + D]}, "AtCollision": GROUND_HIT, "SwordCancel": {"hold": [(40.0 + D, -1.0)]},
+            "AnmSeqCancel": {"hold": [(40.0 + D, -1.0)]}, "EmitEffect": {"trigger": [20.0 + D]},
+            "NoChangeAS": {"hold": [(0.0, 14.0 + D)]}},
+    16167: {"AtSound": {"trigger": [10.0 + D]}, "AtCollision": GROUND_HIT, "SwordCancel": {"hold": [(40.0 + D, -1.0)]},
+            "AnmSeqCancel": {"hold": [(40.0 + D, -1.0)]}},
+    16175: {"AtSound": {"trigger": [10.0 + D]}, "AtCollision": GROUND_HIT, "SwordCancel": {"hold": [(40.0 + D, -1.0)]},
+            "AnmSeqCancel": {"hold": [(40.0 + D, -1.0)]}},
 }
-
 
 def _leaves(nodes, i, depth):
     out, todo = [], [(i, 0)]
@@ -54,6 +85,7 @@ def main():
     ap.add_argument("--src", default=os.path.join(ROOT, "unpacked/Player_Adult.root.asb"))
     ap.add_argument("--value", type=int, default=51)
     ap.add_argument("--replace-hammer", action="store_true")
+    ap.add_argument("--no-hold", action="store_true", help="test: step 1 left out (VALUE has no branch but the attack's)")
     ap.add_argument("--out", default=os.path.join(ROOT, "out/mod/work/Player_Adult.root.asb"))
     ap.add_argument("--baev-src", default=os.path.join(ROOT, "unpacked/Player_Adult.root.baev"))
     ap.add_argument("--baev-out", default=os.path.join(ROOT, "out/mod/work/Player_Adult.root.baev"))
@@ -70,7 +102,7 @@ def main():
         vals = [v for v, _ in br]
         if template is None and not n["events"]:
             template = n["index"]
-        if 7 not in vals or a.value in vals:
+        if 7 not in vals or a.value in vals or a.no_hold:
             continue
         e.add_int_branch(n["index"], a.value, dict((v, t) for v, t in br if v is not None)[7])
         added += 1
@@ -84,7 +116,9 @@ def main():
         n = nodes[i]
         anim = None
         if n["type"] == 3 and isinstance(n.get("anim"), str):
-            anim = next((v for k, v in ANIMS if n["anim"].startswith(k)), None)
+            anim = punch_anim(n["anim"])
+            if anim and os.environ.get("FP_TEST_ANIM"):   # (test: an animation of the game's that cannot be mistaken)
+                anim = os.environ["FP_TEST_ANIM"]
         before = len(e.records)
         j = e.clone_node(i, anim=anim, events="clone")
         clones.setdefault(i, []).append(j)
@@ -116,9 +150,26 @@ def main():
             e.set_body(c, prefix, slots)
         s = e.clone_node(root if is_sel else template, events="drop")
         sprefix = e.parse_body(root)[0] if is_sel else tprefix
-        e.set_body(s, sprefix, {"child": [struct.pack("<iiI", 0, v, c) for v in vals] + [struct.pack("<iiI", 0, 0, root)]})
-        e.set_command_root(cmd, s)
+        # (the new selector takes the root's index, the root's own node the selector's: tools/asb_edit.py swap_nodes)
+        e.set_body(s, sprefix, {"child": [struct.pack("<iiI", 0, v, c) for v in vals] + [struct.pack("<iiI", 0, 0, s)]})
+        e.swap_nodes(root, s)
         done.append(cmd)
+    # the ground swings (inside the command CutS1 and the step attack): the UsingItem selectors whose hammer branch
+    # leads to the hammer's swing animations. Their VALUE branch (step 1 gave it the hammer's nodes) goes to a copy
+    for n in sel:
+        br = dict(e.int_branches(n["index"]))
+        t7 = br.get(7)
+        if t7 is None or n["index"] in [e.command_root(c) for c in COMMANDS]:
+            continue
+        if any(str(nodes[c].get("anim", "")).startswith("Hammer_Attack_Vertical_Advance") for c in _leaves(nodes, t7, 3)):
+            c = deep(t7)
+            prefix, slots = e.parse_body(n["index"])
+            for k, ent in enumerate(slots["child"][:-1]):
+                flags, v, tgt = struct.unpack("<iiI", ent)
+                if v in vals:
+                    slots["child"][k] = struct.pack("<iiI", flags, v, c)
+            e.set_body(n["index"], prefix, slots)
+            done.append(f"#{n['index']}")
     print(f"punch nodes for: {', '.join(done)} ({sum(len(v) for v in clones.values())} copies)")
 
     data = e.build()
@@ -135,7 +186,7 @@ def main():
     for node, ev in EVENT_EDITS.items():   # (a hammer Event node -> its copies' times)
         for c in clones.get(node, []):
             edits[fnv1a(e.guid(c))] = ev
-    assert len(edits) == len(EVENT_EDITS), "an Event node of EVENT_EDITS was not copied"
+    assert all(clones.get(node) for node in EVENT_EDITS), "an Event node of EVENT_EDITS was not copied"
     n = bv.alias_hashes([(fnv1a(new), fnv1a(old)) for new, old in e.guid_aliases], edits)
     open(a.baev_out, "wb").write(bv.to_bytes())
     print(f"BAEV: {n} copied nodes with events")

@@ -7,11 +7,15 @@ after-call 0x8019b6e0 fp_item_get in 0x802ebd20 0x80609d00 0x80a8e0d0 0x80a8ef20
 # (the player's item update, every frame: the one that also says whether the punch is the equipped item)
 after-call 0x8019b6e0 fp_item_get_frame in 0x830350a0
 
-# the item the animation system is told (its blackboard's UsingItem): 7 -> 51 while the punch is the equipped item
+# the item in Link's hand (Link +0x7d8), which the animation system reads where it stands, as its UsingItem: it
+# holds 51 while the punch is in hand (falcon_punch.c keeps it so), and the game's own code reads it as the hammer:
+# every function that loads it (tools/find_item_sites.py)
+load32 0x7d8 fp_hand_load in 0x80223b70 0x80430110 0x804b9b70 0x804c0580 0x804c1aa0 0x804c60d0 0x804c8690 0x804caa80 0x80609d00 0x80623ef0 0x80629c00 0x80672eb0 0x807c0760 0x80814020 0x8081ae80 0x8081c0b0 0x8081c350 0x8081dbe0 0x80820390 0x8084bbb0 0x8094e810 0x8094ece0 0x8095ba90 0x8095be60 0x8095d470 0x809932a0 0x80a5f750 0x80a5fa80 0x80a60030 0x80a61350 0x80a62020 0x80a62700 0x80a63030 0x80bb9980 0x80bc26c0 0x80c225d0 0x80dc6d50 0x80e63520 0x80e77630 0x80e785d0 0x80ec3980 0x80f3ca00 0x811fc2b0 0x811fc7f0 0x8120ebf0 0x819bf460 0x81f15080 0x81f35b80 0x8231a070 0x82320940 0x82334100 0x82334dc0 0x82342a30 0x823467e0 0x826d55c0 0x826d6c50 0x826dc300 0x826dc6d0 0x827b6fd0 0x827b83f0 0x827f1ea0 0x827f8210 0x827f8530 0x827f9410 0x827fa5f0 0x827fb180 0x82803380 0x82803bd0 0x82804100 0x828140e0 0x82814440 0x828266b0 0x82b57000 0x82deed30 0x82deee60 0x82e58600 0x82e93160 0x82e98d00 0x82e9a070 0x82ea25b0 0x82ece000 0x82f69de0 0x8303aff0 0x83042760 0x83044420 0x832bbee0 0x832c0170 0x832c1bd0
+
+# the same field where it is copied to the blackboard's UsingItem: 51 there too
 load32 0x7d8 fp_as_item in 0x82e57c30 0x8305faa0 0x826d02e0 0x826d05c0
 before-icall 0x83035be0 fp_as_set
 before 0x837d9790 fp_blackboard_set
 
-# the attack's phases (the animation commands the player's states ask for): the shout, the punch's power
+# the attack's phases (the animation commands the player's states ask for): the shout
 before 0x80953270 fp_as_command
-after 0x82bc8960 fp_attack_power

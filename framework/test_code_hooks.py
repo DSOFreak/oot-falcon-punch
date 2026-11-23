@@ -103,7 +103,7 @@ class Build(unittest.TestCase):
         self.assertEqual([s[0] for s in H.sources(self.work)], ["00_A_m", "table"])
         H.apply(self.gen, self.work, say=said.append)
         out = self.lifted()
-        self.assertIn("c->x[2]=e(c, recomp_load32(c,c->x[0] + 2008));", out)
+        self.assertIn("c->x[2]=e(c, recomp_load32(c,c->x[0] + 2008), c->x[0] + 2008);", out)
         self.assertIn("c->x[30] = 0x80001010ULL; f_80002000(c); c(c);", out)
         self.assertIn("{ d(c); { uint64_t _t = c->x[8]; c->x[30] = 0x80001020ULL; A64_ICALL(c, _t); } }", out)
         self.assertIn("{ d(c); A64_IJUMP(c, c->x[3]); return; }", out)
@@ -111,7 +111,7 @@ class Build(unittest.TestCase):
         self.assertIn("void f_80002000(Ctx *__restrict A64_NOESC c) {\n    if (a(c)) return;\n"
                       "    mod_hooked_f_80002000(c);\n    b(c);\n}\n", out)
         self.assertIn("extern int a(Ctx *c);", out)
-        self.assertIn("extern uint64_t e(Ctx *c, uint64_t value);", out)
+        self.assertIn("extern uint64_t e(Ctx *c, uint64_t value, uint64_t address);", out)
         self.assertEqual(out.count("void f_80001000(Ctx *__restrict A64_NOESC c) {"), 1)
 
     def test_other_build_and_off(self):

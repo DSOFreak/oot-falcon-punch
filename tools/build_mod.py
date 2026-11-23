@@ -30,6 +30,8 @@ P04 = "Model/Player_Adult_04_Animation.anim.bfres"
 ASB = "AS/Player_Adult.root.asb"
 ASNODE = "AnimationEvent/AsNode/Player_Adult.root.baev"
 V1_ANIMS = {   # (tools/make_phases.py: the punch as the phases of the hammer's jump slam; tools/make_recovery.py)
+    "FalconPunch_Ground": "falcon_punch_phase_ground.json",
+    "FalconPunch_GroundZero": "falcon_punch_phase_groundzero.json",
     "FalconPunch_Pre": "falcon_punch_phase_pre.json",
     "FalconPunch_St": "falcon_punch_phase_st.json",
     "FalconPunch_Jump": "falcon_punch_phase_jump.json",
@@ -130,6 +132,51 @@ def item_code_and_sounds(mod):
         shutil.copyfile(p, mod / "romfs" / rel)
 
 
+PLAYER_PACK = "Pack/Actor/Player_Adult.pack"
+ATTACK_TABLE = "GameBalance/AttackParam/Player.game__gamebalance__AttackParam.bgyml"
+# (AttackType values are murmur3 of the enum's names, which the game's code does not spell out: by their hashes)
+ATTACKS = {   # the punch's attack type (the burning Deku Stick's, tools/build_asb.py ATTACK) <- the hammer's entry
+    0x66E3B739: 0x56923DBF,   # 104: the punch         <- 108, the hammer's jump slam
+    0x4F9D320A: 0xF8C3C867,   # 103: its shock wave    <- 117, the slam's shock wave
+}
+ATTACK_MULTIPLIER = 3000.0    # times the weapon's attack (the hammer's 3): nothing in the game has that much life
+
+
+def player_attacks(romfs, out, t):
+    """The punch's two entries in adult Link's attack table: the hammer's (its sensors and attributes: what a
+    hammer breaks, the punch breaks), with fire and the multiplier, and the strongest reactions the table has"""
+    import byml7
+    import mmh3
+    import oead
+    old = zs.load(str(romfs / (PLAYER_PACK + ".zs")))
+    sarc = oead.Sarc(old)
+    w = oead.SarcWriter.from_sarc(sarc)
+    p = byml7.load(bytes(sarc.get_file(ATTACK_TABLE).data))
+    rows = {int(r["AttackType"]): r for r in p["AttackParams"]}
+    h = lambda name: oead.U32(mmh3.hash(name, 0, signed=False))  # noqa: E731
+    guard_break = h("GuardBreak")
+    for mine, hammer in ATTACKS.items():
+        fire = rows[mine]["DamageElements"]
+        assert len(fire) == 1 and int(fire[0]) == int(h("Fire")), "the burning stick's entry"
+        for k in list(rows[mine].keys()):
+            if k not in ("AttackType", "DamageElements"):
+                rows[mine][k] = rows[hammer][k]
+        rows[mine]["DamageMultiplier"] = oead.F32(ATTACK_MULTIPLIER)
+        rows[mine]["DamageIntensity"] = h("Strong")
+        rows[mine]["KnockbackIntensity"] = h("Strong")
+        rows[mine]["HitStopType"] = h("HitStopLong")
+        rows[mine]["IsConsiderWeapon"] = True
+        attrs = list(rows[hammer]["DamageAttributres"])
+        if not any(int(x) == int(guard_break) for x in attrs):
+            attrs.insert(0, guard_break)
+        rows[mine]["DamageAttributres"] = oead.byml.Array(attrs)
+    w.files[ATTACK_TABLE] = byml7.dump(p)
+    new = bytes(w.write()[1])
+    (out / PLAYER_PACK).parent.mkdir(parents=True, exist_ok=True)
+    (out / (PLAYER_PACK + ".zs")).write_bytes(zs.compress(new, "x.pack.zs"))
+    grow(t, PLAYER_PACK, len(old), len(new))
+
+
 ICON_SRC = "Armor_Adult_Gauntlet_Gold"   # stand-in icon (a fist) until a drawn one exists
 
 
@@ -228,6 +275,7 @@ def main():
         if not a.replace_hammer:
             item_data(romfs, out, t)
             item_pack(romfs, out, t)
+            player_attacks(romfs, out, t)
             item_icon(romfs, out, t)
             item_icon(romfs, out, t, name=f"{CARRIER}_PouchIcon")   # (the UI also builds "%s_PouchIcon")
     (out / (P04 + ".zs")).write_bytes(zs.compress(new04, "x.bfres.zs"))

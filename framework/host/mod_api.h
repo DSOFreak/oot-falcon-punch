@@ -5,7 +5,7 @@
        #include "mod_api.h"
        int my_before(Ctx *c);                         before <function>: other than 0 skips the function
        void my_after(Ctx *c);                         after, after-call, before-icall
-       uint64_t my_value(Ctx *c, uint64_t value);     load32
+       uint64_t my_value(Ctx *c, uint64_t value, uint64_t address);     load32: the value, where it was read
 
    c->x[0..30] are the game's X registers (c->x[0..7] a function's arguments, c->x[0] its result), 64 bits each: a W
    register is the low half. A hook may change them; what the game's calling convention lets a function change
@@ -46,6 +46,9 @@ int mod_streq(uint64_t address, const char *text);
    returns, whatever the function did to them; its result (x0) is returned. The function runs on the hook's thread,
    on the game's stack below the hooked function's frame: only where the game itself could make the call there */
 uint64_t mod_call(Ctx *c, void (*function)(Ctx *), uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3);
+
+/* Milliseconds on a clock that only goes forward (not the game's time: it runs on in a pause) */
+uint64_t mod_time_ms(void);
 
 /* A line in triforce_log.txt, "mod: " before it. Not from a hook that runs every frame */
 void mod_log(const char *fmt, ...);

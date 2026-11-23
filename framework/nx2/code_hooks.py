@@ -28,8 +28,9 @@ it: f_80953270):
                                                  only (what one caller gets, where others must see the game's own)
     before-icall <function> <hook>               void hook(Ctx *c): before each indirect call or jump of the function
                                                  (a virtual call: its arguments are in c->x[0..7])
-    load32 <offset> <hook> in <function>...      uint64_t hook(Ctx *c, uint64_t value): each 32-bit load from
-                                                 <register> + <offset> in the named functions gives the hook's value
+    load32 <offset> <hook> in <function>...      uint64_t hook(Ctx *c, uint64_t value, uint64_t address): each
+                                                 32-bit load from <register> + <offset> in the named functions
+                                                 gives the hook's value (address: where it was loaded from)
 
 A hook's name is a C identifier that one of the mod's .c files defines. The mod's C sees the game as the runtime does
 (host/mod_api.h: the registers, the game's memory, the log, sounds); it is trusted code, as the runtime is: a mod with
@@ -232,7 +233,8 @@ def edit(body, name, hook):
     if kind == "before-icall":
         return ICALL.subn(lambda m: "{ %s(c); %s }" % (fn, m.group(1)), body)
     if kind == "load32":
-        return re.subn(LOAD32 % hook["offset"], lambda m: "%s(c, %s)" % (fn, m.group(0)), body)
+        return re.subn(LOAD32 % hook["offset"],
+                       lambda m: "%s(c, %s, %s + %d)" % (fn, m.group(0), m.group(1), hook["offset"]), body)
     raise AssertionError(kind)
 
 
@@ -253,7 +255,7 @@ def declarations(hooks):
         if h["hook"] in seen:
             continue
         seen.add(h["hook"])
-        out.append({"before": "extern int %s(Ctx *c);", "load32": "extern uint64_t %s(Ctx *c, uint64_t value);"}
+        out.append({"before": "extern int %s(Ctx *c);", "load32": "extern uint64_t %s(Ctx *c, uint64_t value, uint64_t address);"}
                    .get(h["kind"], "extern void %s(Ctx *c);") % h["hook"])
     return "/* (nx2/code_hooks.py) the mods' hooks this file calls */\n" + "\n".join(out) + "\n"
 

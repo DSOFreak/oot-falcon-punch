@@ -77,6 +77,8 @@ uint64_t mod_call(Ctx *c, void (*function)(Ctx *), uint64_t a0, uint64_t a1, uin
     return result;
 }
 
+uint64_t mod_time_ms(void) { return GetTickCount64(); }
+
 void mod_log(const char *fmt, ...) {
     char line[512];
     va_list ap;

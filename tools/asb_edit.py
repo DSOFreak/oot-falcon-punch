@@ -131,6 +131,18 @@ class Editor:
         slots["child"][k] = bytes(e)
         self.set_body(i, prefix, slots)
 
+    def swap_nodes(self, i, j):
+        """Exchange two nodes' places in the node table (records and bodies): what referred to index i now gets
+        j's node and the other way round. A command's root is replaced this way: the game does not follow a
+        changed root index in the command table (seen in game, 2026-11-23), so the new root takes the old one's
+        index"""
+        self.records[i], self.records[j] = self.records[j], self.records[i]
+        bi, bj = self.bodies.pop(i, None), self.bodies.pop(j, None)
+        if bj is not None:
+            self.bodies[i] = bj
+        if bi is not None:
+            self.bodies[j] = bi
+
     def set_command_root(self, name, node):
         """Make `node` the root node of command `name` (u16 at +0x2c of its 0x30-byte record)"""
         idx = [k for k, c in enumerate(self.a.commands) if c["name"] == name]
@@ -147,9 +159,11 @@ class Editor:
 
     def clone_node(self, i, anim=None, events="clone"):
         """A copy of node i (same children); anim: another animation name (SkeletalAnimation). Returns its index.
-        events: what the copy does with the Event nodes in its event slot. Two parents must not share one Event
-        node (the game crashes at load), so 'clone' copies them too (new GUIDs; self.guid_aliases gets
-        (new GUID, old GUID) so the AsNode BAEV can give the copies the same events) and 'drop' leaves them out."""
+        events: what the copy does with the Event nodes in its event slot: 'clone' copies them too (new GUIDs;
+        self.guid_aliases gets (new GUID, old GUID) so the AsNode BAEV can give the copies the same events, or
+        edited ones: tools/baev.py) and 'drop' leaves them out. (The game's own file shares Event nodes between
+        parents, e.g. #17400; the crashes first put down to copies were the resource size table: tools/build_mod.py
+        SLACK.)"""
         rec = bytearray(self.records[i])
         self.guid_seed += 1
         struct.pack_into("<I", rec, 20, self.guid_seed)   # GUID's first word: unique
