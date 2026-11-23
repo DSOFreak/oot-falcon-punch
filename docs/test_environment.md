@@ -73,3 +73,6 @@ Nothing here touches `/Games/TF-OOT/Hookshot` or the player's real saves.
   host places that touched them (`triforce+offset`: look the offset up in `nm -n bin/triforce` for the `f_<addr>`).
 - The test save is in the Fire Temple: the corridor before the lava room. No enemy is in reach; walking on in the
   lava room costs hearts.
+- Another save: in the load list (after the first `e`), `key.sh s` moves down one entry; the list is newest
+  first. The fifth entry stands in the Fire Temple's entrance hall (a Fire Keese flies there, out of reach of a
+  blind walk).
