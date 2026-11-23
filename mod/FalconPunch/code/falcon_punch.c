@@ -15,6 +15,11 @@
      f_83035be0  the item component's setter: it ends in a virtual call (blackboard, UsingItem's index, the item)
      f_837d9790  that call's target for the player: the blackboard's set-int (x0 blackboard, w1 index, w2 value)
      f_80953270  asks the animation system for a command (x0 its controller, w1 the slot, x2 -> the name's text)
+   The hammer in Link's fist is still there, and hits (the attack's shape is the weapon actor's): it is only not
+   drawn. Link's actor ([Link +0x18]) has an equipment user component ([[actor +0x270] +0x200], as f_80817690
+   reads it) with eight equipment slots; the tool in his hand is slot 1 (seen in memory, 2026-11-23: slot 0 the
+   sword, 4 the shield). A slot's "visible" request is a byte and a flag (f_82e1e260, the game's own setter, used
+   by its event scripts): slot state at component +0x4b0 + slot * 0xa8, the value at +0xa4, flag 4 at +0xa0.
    The hammer's attacks: the swing on the ground is the command CutS1; out of a jump or a run it is a jump slam,
    three commands: CutJumpSt (wind-up), CutJumpEd (the leap), CutJumpLand (the hit); then CutHammerAfter. */
 #include <string.h>
@@ -23,6 +28,13 @@
 enum { FP_ITEM = 51, HAMMER = 7 };
 #define LINK_CLASS 0x84b6dfc0ULL   /* what Link's first word reads (host/oot_sprint.c) */
 #define LINK_HAND 0x7d8           /* Link's field: the item in his hand, -1 with none */
+#define LINK_ACTOR 0x18           /* Link's field: his actor */
+#define ACTOR_COMPONENTS 0x270
+#define COMPONENTS_EQUIPMENT_USER 0x200
+#define EQUIPMENT_OWNER 0x18      /* the component's actor */
+#define EQUIPMENT_SLOTS 0x20      /* 0x18 each: +8 the equipment's link, +0x10 its id (-1: empty) */
+#define EQUIPMENT_STATES 0x4b0    /* 0xa8 each: +0xa0 flags (4: a visible request), +0xa4 the request's value */
+#define TOOL_SLOT 1
 enum { PHASE_NONE, PHASE_GROUND, PHASE_WINDUP, PHASE_LEAP, PHASE_HIT };
 #define GROUND_PUNCH_MS 1250   /* "PUNCH!" after "Falcon..." on the ground: the fist goes out at frame 42 of 30 a second */
 #define SOUND_FALCON "Sound/Mod/FalconPunch/Falcon.wav"
@@ -37,7 +49,7 @@ static volatile uint64_t punch_due;      /* when the ground punch's "PUNCH!" is 
 static volatile uint64_t hand_address;   /* Link's +0x7d8, seen where the game loads it */
 static volatile uint64_t blackboard;     /* the player's, and UsingItem's index in it: seen at the setter */
 static volatile uint32_t blackboard_index;
-volatile uint64_t fp_debug[8];           /* (for tools/testenv/memscan.py: sym fp_debug) */
+static volatile int tool_hidden;         /* the tool in his hand was asked not to be drawn */
 
 void f_837d9790(Ctx *c);                 /* the game's: the blackboard's set-int */
 static void shout_tick(void);
@@ -68,6 +80,28 @@ static void hand_keep(void) {
     else if (!equipped && now == FP_ITEM) mod_st32(a, HAMMER);
 }
 
+/* the tool in Link's hand, drawn or not */
+static void tool_visible(int visible) {
+    const uint64_t a = hand_address;
+    if (!a || mod_ld64(a - LINK_HAND) != LINK_CLASS) return;
+    const uint64_t actor = mod_ld64(a - LINK_HAND + LINK_ACTOR);
+    const uint64_t components = actor ? mod_ld64(actor + ACTOR_COMPONENTS) : 0;
+    const uint64_t user = components ? mod_ld64(components + COMPONENTS_EQUIPMENT_USER) : 0;
+    if (!user || mod_ld64(user + EQUIPMENT_OWNER) != actor) return;
+    if (!visible && mod_ld32(user + EQUIPMENT_SLOTS + TOOL_SLOT * 0x18 + 0x10) == 0xffffffffu) return;   /* (no tool) */
+    const uint64_t state = user + EQUIPMENT_STATES + TOOL_SLOT * 0xa8;
+    if (mod_ld8(state + 0xa4) == (uint8_t)visible) return;
+    mod_st8(state + 0xa4, (uint8_t)visible);
+    mod_st32(state + 0xa0, mod_ld32(state + 0xa0) | 4);
+}
+
+/* every frame: no hammer in the fist while the punch is the equipped item (the request is kept: the tool is a
+   new actor each time it is taken in hand), and the tool drawn again once another item is equipped */
+static void tool_keep(void) {
+    if (equipped) tool_visible(0), tool_hidden = 1;
+    else if (tool_hidden) tool_visible(1), tool_hidden = 0;
+}
+
 /* the same in the player's item update (f_830350a0), which runs every frame and asks for the equipped item alone
    (other callers ask for other slots too): whether the punch is equipped is taken here. The game may have told the
    animation system "hammer" before this was known (it does so once, when the item is taken in hand): it is told
@@ -78,10 +112,12 @@ void fp_item_get_frame(Ctx *c) {
     shout_tick();
     if (punch == equipped) {
         hand_keep();
+        tool_keep();
         return;
     }
     equipped = punch;
     hand_keep();
+    tool_keep();
     if (punch) mod_sound_load(SOUND_FALCON), mod_sound_load(SOUND_PUNCH);   /* (read ahead of the first punch) */
     if (blackboard && using_item == (punch ? HAMMER : FP_ITEM))
         mod_call(c, f_837d9790, blackboard, blackboard_index, punch ? FP_ITEM : HAMMER, 0);
@@ -105,7 +141,6 @@ int fp_blackboard_set(Ctx *c) {
     if (c->x[0] != blackboard || (uint32_t)c->x[1] != blackboard_index || !blackboard) return 0;
     c->x[2] = to_as(c->x[2]);
     using_item = (int)(uint32_t)c->x[2];
-    fp_debug[0] = (uint64_t)equipped, fp_debug[1] = (uint64_t)(uint32_t)using_item;
     if (using_item != FP_ITEM) phase = PHASE_NONE;
     return 0;
 }
@@ -113,7 +148,6 @@ int fp_blackboard_set(Ctx *c) {
 static void set_phase(int now) {
     if (now == phase) return;
     phase = now;
-    fp_debug[2] = (uint64_t)now;
     punch_due = 0;
     if (now == PHASE_WINDUP) mod_sound_play(SOUND_FALCON, SOUND_GAIN);
     else if (now == PHASE_GROUND) mod_sound_play(SOUND_FALCON, SOUND_GAIN), punch_due = mod_time_ms() + GROUND_PUNCH_MS;
@@ -140,7 +174,7 @@ int fp_as_command(Ctx *c) {
     else if (mod_streq(name, "CutJumpSt")) set_phase(PHASE_WINDUP);
     else if (mod_streq(name, "CutJumpEd")) set_phase(phase == PHASE_NONE ? PHASE_NONE : PHASE_LEAP);
     else if (mod_streq(name, "CutJumpLand")) set_phase(phase == PHASE_NONE ? PHASE_NONE : PHASE_HIT);
+    else if (mod_streq(name, "CutHammerAfter")) return 0;   /* (the attack's last part: it can come before "PUNCH!") */
     else set_phase(PHASE_NONE);
-    fp_debug[5]++;
     return 0;
 }

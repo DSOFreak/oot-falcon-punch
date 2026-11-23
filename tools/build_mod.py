@@ -178,6 +178,18 @@ def player_attacks(romfs, out, t):
 ICON_SRC = "Armor_Adult_Gauntlet_Gold"   # stand-in icon (a fist) until a drawn one exists
 
 
+def punch_flames(romfs, out, t):
+    """The effect link file with the punch's animations: flames on the fist and the arm (tools/build_elink.py)"""
+    import build_elink
+    src = next((romfs / "ELink2").glob("elink2.Product.*.belnk.zs"))
+    rel = f"ELink2/{src.name[:-3]}"
+    old = zs.load(str(src))
+    new = build_elink.checked(old)
+    (out / "ELink2").mkdir(parents=True, exist_ok=True)
+    (out / (rel + ".zs")).write_bytes(zs.compress(new, "x.belnk.zs"))
+    grow(t, rel, len(old), len(new) + (64 << 10))
+
+
 def item_icon(romfs, out, t, name=CARRIER):
     """UI/Tex/Icon/<carrier>.bntx: a copy of ICON_SRC with its texture renamed (the name is stored once, at the
     string table: u16 length + text; the new name is shorter, the rest is zero-padded). New file: new RESTBL entry,
@@ -274,6 +286,7 @@ def main():
             item_data(romfs, out, t)
             item_pack(romfs, out, t)
             player_attacks(romfs, out, t)
+            punch_flames(romfs, out, t)
             item_icon(romfs, out, t)
             item_icon(romfs, out, t, name=f"{CARRIER}_PouchIcon")   # (the UI also builds "%s_PouchIcon")
     (out / (P04 + ".zs")).write_bytes(zs.compress(new04, "x.bfres.zs"))

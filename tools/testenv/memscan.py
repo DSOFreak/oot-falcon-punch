@@ -54,6 +54,7 @@ def main():
                __GL_SHADER_DISK_CACHE_PATH=f"{fp_env}/cache/nvidia", MESA_SHADER_CACHE_DIR=f"{fp_env}/cache/mesa",
                WAYLAND_DISPLAY="wayland-fptest", SDL_VIDEODRIVER="wayland",
                SDL_GAMECONTROLLER_IGNORE_DEVICES="0x045e/0x028e",   # (a plugged-in pad overrides keyboard RB)
+               HOS_AUDIO_MUTE="1", HOS_AUDIO_DUMP=f"{fp_env}/audio.wav",   # (silent; what it would play, as a file)
                HOS_WATCH=os.path.join(ctrl, "watch"))   # (write up to 4 guest addresses there: data breakpoints, see host/posix/prof.c)
     env.pop("DISPLAY", None)
     env.pop("HYPRLAND_INSTANCE_SIGNATURE", None)
